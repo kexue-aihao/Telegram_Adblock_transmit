@@ -385,7 +385,7 @@ curl -fsS https://telegram-api.example.com/bot<YOUR_TOKEN>/getMe
 
 ## 9. 源码运行和开发
 
-本地运行需要 Go 1.24+ 和 PostgreSQL：
+本地运行需要 Go 1.26+ 和 PostgreSQL：
 
 ~~~bash
 export BOT_TOKEN='...'

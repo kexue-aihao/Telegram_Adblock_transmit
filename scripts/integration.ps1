@@ -32,7 +32,7 @@ try {
     # PostgreSQL is intentionally not published to the host in deployment.
     $repoPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
     $testDSN = "postgres://telegram_bot:$postgresPassword@postgres:5432/${testDatabase}?sslmode=disable"
-    docker run --rm --network "${projectName}_default" -e "TEST_DATABASE_URL=$testDSN" -v "${repoPath}:/src" -w /src golang:1.24-alpine sh -c "go test ./internal/store -run TestRuleRepositoryIntegration -count=1"
+    docker run --rm --network "${projectName}_default" -e "TEST_DATABASE_URL=$testDSN" -v "${repoPath}:/src" -w /src golang:1.26-alpine sh -c "go test ./internal/store -run TestRuleRepositoryIntegration -count=1"
     if ($LASTEXITCODE -ne 0) {
         throw "Go PostgreSQL integration tests failed"
     }
