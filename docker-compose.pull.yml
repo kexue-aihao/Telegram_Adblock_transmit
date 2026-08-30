@@ -6,9 +6,24 @@ services:
     pull_policy: always
     restart: unless-stopped
     init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: "0.50"
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       BOT_TOKEN: ${BOT_TOKEN:?set BOT_TOKEN in .env}
       TELEGRAM_API_ENDPOINT: ${TELEGRAM_API_ENDPOINT:-https://api.telegram.org/bot%s/%s}
+      TELEGRAM_ALLOW_INSECURE_HTTP: ${TELEGRAM_ALLOW_INSECURE_HTTP:-false}
+      TELEGRAM_HTTP_TIMEOUT: ${TELEGRAM_HTTP_TIMEOUT:-30s}
       DATABASE_URL: postgres://telegram_bot:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/telegram_adblock?sslmode=disable
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
@@ -17,9 +32,17 @@ services:
     stop_grace_period: 20s
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
     pull_policy: if_not_present
     restart: unless-stopped
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: "1.00"
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_DB: telegram_adblock
       POSTGRES_USER: telegram_bot

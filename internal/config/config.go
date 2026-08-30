@@ -2,15 +2,21 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
+
+const defaultTelegramHTTPTimeout = 30 * time.Second
 
 type Config struct {
 	BotToken            string
 	DatabaseURL         string
 	TelegramAPIEndpoint string
+	TelegramHTTPTimeout time.Duration
 	LogLevel            string
 }
 
@@ -19,6 +25,7 @@ func Load() (Config, error) {
 		BotToken:            os.Getenv("BOT_TOKEN"),
 		DatabaseURL:         os.Getenv("DATABASE_URL"),
 		TelegramAPIEndpoint: os.Getenv("TELEGRAM_API_ENDPOINT"),
+		TelegramHTTPTimeout: defaultTelegramHTTPTimeout,
 		LogLevel:            os.Getenv("LOG_LEVEL"),
 	}
 	if cfg.BotToken == "" {
@@ -30,7 +37,18 @@ func Load() (Config, error) {
 	if cfg.TelegramAPIEndpoint == "" {
 		cfg.TelegramAPIEndpoint = "https://api.telegram.org/bot%s/%s"
 	}
-	if err := validateTelegramAPIEndpoint(cfg.TelegramAPIEndpoint); err != nil {
+	if rawTimeout := os.Getenv("TELEGRAM_HTTP_TIMEOUT"); rawTimeout != "" {
+		timeout, err := time.ParseDuration(rawTimeout)
+		if err != nil || timeout <= 0 {
+			return Config{}, fmt.Errorf("TELEGRAM_HTTP_TIMEOUT must be a positive duration: %q", rawTimeout)
+		}
+		cfg.TelegramHTTPTimeout = timeout
+	}
+	allowInsecureHTTP, err := parseBoolEnv("TELEGRAM_ALLOW_INSECURE_HTTP")
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateTelegramAPIEndpoint(cfg.TelegramAPIEndpoint, allowInsecureHTTP); err != nil {
 		return Config{}, err
 	}
 	if cfg.LogLevel == "" {
@@ -39,7 +57,19 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-func validateTelegramAPIEndpoint(endpoint string) error {
+func parseBoolEnv(name string) (bool, error) {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return false, nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s must be true or false", name)
+	}
+	return value, nil
+}
+
+func validateTelegramAPIEndpoint(endpoint string, allowInsecureHTTP bool) error {
 	if strings.Count(endpoint, "%s") != 2 {
 		return fmt.Errorf("TELEGRAM_API_ENDPOINT must contain exactly two %%s placeholders (token and method)")
 	}
@@ -51,8 +81,28 @@ func validateTelegramAPIEndpoint(endpoint string) error {
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return fmt.Errorf("TELEGRAM_API_ENDPOINT must be an absolute HTTP(S) URL")
 	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("TELEGRAM_API_ENDPOINT must use http or https")
+	if parsed.Scheme == "https" {
+		return nil
+	}
+	if parsed.Scheme != "http" {
+		return fmt.Errorf("TELEGRAM_API_ENDPOINT must use https or explicitly allowed http")
+	}
+	if !allowInsecureHTTP {
+		return fmt.Errorf("TELEGRAM_API_ENDPOINT uses http; set TELEGRAM_ALLOW_INSECURE_HTTP=true only for a local or Docker-network endpoint")
+	}
+	if !isLocalOrDockerHost(parsed.Hostname()) {
+		return fmt.Errorf("TELEGRAM_API_ENDPOINT http host must be loopback or a private Docker service")
 	}
 	return nil
+}
+
+func isLocalOrDockerHost(host string) bool {
+	if host == "localhost" || host == "host.docker.internal" || host == "gateway.docker.internal" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate()
+	}
+	// Docker Compose service names are single DNS labels, unlike public hosts.
+	return host != "" && !strings.Contains(host, ".") && !strings.Contains(host, ":")
 }

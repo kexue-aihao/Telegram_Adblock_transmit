@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/ports"
@@ -35,12 +36,12 @@ var managementCommands = map[string]struct{}{
 // Service coordinates rule storage, the compiled rule cache, audit storage,
 // and Telegram side effects.
 type Service struct {
-	ruleStore ports.RuleStore
-	cache     ports.RuleCache
-	audit     ports.AuditStore
-	telegram  ports.TelegramClient
-	logger    *slog.Logger
-	clock     func() time.Time
+	ruleStore   ports.RuleStore
+	cache       ports.RuleCache
+	audit       ports.AuditStore
+	telegram    ports.TelegramClient
+	logger      *slog.Logger
+	botUsername string
 }
 
 // NewService builds a moderation service. A nil logger falls back to the
@@ -49,7 +50,16 @@ func NewService(ruleStore ports.RuleStore, cache ports.RuleCache, audit ports.Au
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Service{ruleStore: ruleStore, cache: cache, audit: audit, telegram: telegram, logger: logger, clock: time.Now}
+	return &Service{ruleStore: ruleStore, cache: cache, audit: audit, telegram: telegram, logger: logger}
+}
+
+// SetBotUsername configures the username used to route /command@bot messages.
+// It should be called once after Telegram getMe succeeds and before polling.
+func (s *Service) SetBotUsername(username string) {
+	if s == nil {
+		return
+	}
+	s.botUsername = strings.TrimPrefix(strings.TrimSpace(username), "@")
 }
 
 // NewProcessor is retained as a descriptive alias for callers migrating from
@@ -80,9 +90,14 @@ func IsManagementCommand(content string) bool {
 // ParseCommand returns a normalized command name and the unmodified argument
 // text. It accepts Telegram's /command@bot form and ignores leading spaces.
 func ParseCommand(content string) (name, args string, ok bool) {
+	name, _, args, ok = parseCommandTarget(content)
+	return name, args, ok
+}
+
+func parseCommandTarget(content string) (name, target, args string, ok bool) {
 	content = strings.TrimSpace(content)
 	if content == "" || content[0] != '/' {
-		return "", "", false
+		return "", "", "", false
 	}
 	body := content[1:]
 	separator := strings.IndexFunc(body, unicode.IsSpace)
@@ -92,18 +107,42 @@ func ParseCommand(content string) (name, args string, ok bool) {
 	}
 	first = strings.TrimSpace(first)
 	if first == "" {
-		return "", "", false
+		return "", "", "", false
 	}
 	if at := strings.IndexByte(first, '@'); at >= 0 {
+		target = strings.TrimSpace(first[at+1:])
 		first = first[:at]
+		if target == "" {
+			return "", "", "", false
+		}
 	}
-	return strings.ToLower(first), strings.TrimSpace(rest), true
+	if first == "" {
+		return "", "", "", false
+	}
+	return strings.ToLower(first), target, strings.TrimSpace(rest), true
+}
+
+func (s *Service) isManagementCommand(content string) bool {
+	name, target, _, ok := parseCommandTarget(content)
+	if !ok {
+		return false
+	}
+	if target != "" && (s == nil || s.botUsername == "" || !strings.EqualFold(target, s.botUsername)) {
+		return false
+	}
+	_, exists := managementCommands[name]
+	return exists
+}
+
+func (s *Service) targetsOtherBot(content string) bool {
+	_, target, _, ok := parseCommandTarget(content)
+	return ok && target != "" && (s == nil || s.botUsername == "" || !strings.EqualFold(target, s.botUsername))
 }
 
 // HandleUpdate is the normal entry point for a converted Telegram update.
 // It handles a recognized command and otherwise applies moderation.
 func (s *Service) HandleUpdate(ctx context.Context, message domain.ModerationMessage) (bool, error) {
-	if IsManagementCommand(ExtractContent(message)) {
+	if s.isManagementCommand(ExtractContent(message)) {
 		return s.HandleCommand(ctx, message)
 	}
 	return s.Process(ctx, message)
@@ -140,7 +179,10 @@ func (s *Service) process(ctx context.Context, message domain.ModerationMessage,
 	if content == "" {
 		return false, nil
 	}
-	if IsManagementCommand(content) {
+	if s.targetsOtherBot(content) {
+		return false, nil
+	}
+	if s.isManagementCommand(content) {
 		admin := false
 		if adminKnown != nil {
 			admin = *adminKnown
@@ -208,7 +250,11 @@ func (s *Service) HandleCommand(ctx context.Context, message domain.ModerationMe
 	if !IsSupportedGroup(message) || message.UserIsBot {
 		return false, nil
 	}
-	name, args, ok := ParseCommand(ExtractContent(message))
+	content := ExtractContent(message)
+	if s.targetsOtherBot(content) {
+		return false, nil
+	}
+	name, args, ok := ParseCommand(content)
 	if !ok {
 		return s.Process(ctx, message)
 	}
@@ -255,13 +301,24 @@ func (s *Service) commandAdd(ctx context.Context, message domain.ModerationMessa
 	if s.ruleStore == nil {
 		return false, errors.New("rule store is nil")
 	}
+	if _, err := rules.ValidatePattern(pattern); err != nil {
+		return false, s.send(ctx, message, "规则格式无效，请使用 Go RE2 兼容语法。")
+	}
 	rule, err := s.ruleStore.Add(ctx, domain.NewRule{ChatID: message.ChatID, ChatTitle: message.ChatTitle, Pattern: pattern, CreatedBy: userID(message)})
 	if err != nil {
-		_ = s.send(ctx, message, "无法保存规则："+err.Error())
+		if errors.Is(err, store.ErrRuleLimitExceeded) {
+			_ = s.send(ctx, message, "本群规则数量或总长度已达到上限。")
+		} else {
+			_ = s.send(ctx, message, "无法保存规则，请稍后重试。")
+		}
 		return false, nil
 	}
-	if err := s.refreshCache(ctx, message.ChatID); err != nil {
+	if err := s.refreshCacheWithRetry(ctx, message.ChatID); err != nil {
 		s.logger.Error("unable to refresh rule cache", "chat_id", message.ChatID, "error", err)
+		if s.cache != nil {
+			s.cache.Remove(message.ChatID)
+		}
+		_ = s.send(ctx, message, "规则已保存，但缓存刷新失败，请稍后重试。")
 		return false, err
 	}
 	return false, s.send(ctx, message, fmt.Sprintf("规则 #%d 已启用。", rule.ID))
@@ -304,7 +361,11 @@ func (s *Service) commandRemove(ctx context.Context, message domain.ModerationMe
 		}
 		return false, s.send(ctx, message, "删除规则失败："+err.Error())
 	}
-	if err := s.refreshCache(ctx, message.ChatID); err != nil {
+	if err := s.refreshCacheWithRetry(ctx, message.ChatID); err != nil {
+		if s.cache != nil {
+			s.cache.Remove(message.ChatID)
+		}
+		s.logger.Error("unable to refresh rule cache", "chat_id", message.ChatID, "error", err)
 		return false, err
 	}
 	return false, s.send(ctx, message, fmt.Sprintf("规则 #%d 已删除。", id))
@@ -328,7 +389,11 @@ func (s *Service) commandSetEnabled(ctx context.Context, message domain.Moderati
 		}
 		return false, s.send(ctx, message, "更新规则失败："+err.Error())
 	}
-	if err := s.refreshCache(ctx, message.ChatID); err != nil {
+	if err := s.refreshCacheWithRetry(ctx, message.ChatID); err != nil {
+		if s.cache != nil {
+			s.cache.Remove(message.ChatID)
+		}
+		s.logger.Error("unable to refresh rule cache", "chat_id", message.ChatID, "error", err)
 		return false, err
 	}
 	status := "停用"
@@ -417,6 +482,25 @@ func (s *Service) refreshCache(ctx context.Context, chatID int64) error {
 	return nil
 }
 
+func (s *Service) refreshCacheWithRetry(ctx context.Context, chatID int64) error {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := s.refreshCache(ctx, chatID); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		if attempt < 2 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(50*(attempt+1)) * time.Millisecond):
+			}
+		}
+	}
+	return lastErr
+}
+
 func (s *Service) send(ctx context.Context, message domain.ModerationMessage, text string) error {
 	if s.telegram == nil {
 		return errors.New("telegram client is nil")
@@ -450,7 +534,7 @@ func (s *Service) LoadCache(ctx context.Context) error {
 		compiled, compileErr := rules.CompileRules(stored)
 		if compileErr != nil {
 			s.logger.Error("unable to compile stored rules", "chat_id", chatID, "error", compileErr)
-			continue
+			return fmt.Errorf("compile stored rules for chat %d: %w", chatID, compileErr)
 		}
 		s.cache.Replace(chatID, compiled)
 	}
@@ -473,26 +557,59 @@ func truncateString(value string, maxBytes int) string {
 	if len(value) <= maxBytes {
 		return value
 	}
-	return value[:maxBytes]
+	if maxBytes <= 0 {
+		return ""
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.ValidString(value[:cut]) {
+		cut--
+	}
+	return value[:cut]
 }
 
 func chunkLines(lines []string, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
 	chunks := make([]string, 0, len(lines))
 	current := ""
 	for _, line := range lines {
-		candidate := line
-		if current != "" {
-			candidate = current + "\n" + line
-		}
-		if current != "" && len(candidate) > limit {
-			chunks = append(chunks, current)
-			current = line
-		} else {
-			current = candidate
+		for _, piece := range splitByBytes(line, limit) {
+			candidate := piece
+			if current != "" {
+				candidate = current + "\n" + piece
+			}
+			if current != "" && len(candidate) > limit {
+				chunks = append(chunks, current)
+				current = piece
+			} else {
+				current = candidate
+			}
 		}
 	}
 	if current != "" {
 		chunks = append(chunks, current)
 	}
 	return chunks
+}
+
+func splitByBytes(value string, limit int) []string {
+	if len(value) <= limit {
+		return []string{value}
+	}
+	parts := make([]string, 0, (len(value)/limit)+1)
+	start, size := 0, 0
+	for index, r := range value {
+		runeSize := utf8.RuneLen(r)
+		if size > 0 && size+runeSize > limit {
+			parts = append(parts, value[start:index])
+			start = index
+			size = 0
+		}
+		size += runeSize
+	}
+	if start < len(value) {
+		parts = append(parts, value[start:])
+	}
+	return parts
 }

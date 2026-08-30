@@ -3,8 +3,10 @@ package moderation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
 )
@@ -186,5 +188,53 @@ func TestParseCommand(t *testing.T) {
 		if name != tc.name || args != tc.args || ok != tc.ok {
 			t.Errorf("ParseCommand(%q) = %q, %q, %v", tc.content, name, args, ok)
 		}
+	}
+}
+
+func TestCommandForOtherBotIsIgnored(t *testing.T) {
+	tg := &fakeTelegram{admin: true}
+	cache := &fakeCache{matched: []int64{8}}
+	svc := NewService(&fakeRules{}, cache, &fakeAudit{}, tg, nil)
+	svc.SetBotUsername("MyBot")
+	message := testMessage()
+	message.Text = "/rule_test@OtherBot spam"
+	if deleted, err := svc.HandleUpdate(context.Background(), message); err != nil || deleted {
+		t.Fatalf("command for another bot was handled: %v, %v", deleted, err)
+	}
+	if len(cache.queries) != 0 || len(tg.sends) != 0 {
+		t.Fatalf("command for another bot had side effects: cache=%v sends=%v", cache.queries, tg.sends)
+	}
+}
+
+func TestCommandForThisBotIsHandled(t *testing.T) {
+	tg := &fakeTelegram{admin: true}
+	cache := &fakeCache{matched: []int64{8}}
+	svc := NewService(&fakeRules{}, cache, &fakeAudit{}, tg, nil)
+	svc.SetBotUsername("MyBot")
+	message := testMessage()
+	message.Text = "/rule_test@mybot spam"
+	if deleted, err := svc.HandleUpdate(context.Background(), message); err != nil || deleted {
+		t.Fatalf("command for this bot failed: %v, %v", deleted, err)
+	}
+	if len(cache.queries) != 1 || len(tg.sends) != 1 {
+		t.Fatalf("command for this bot was not handled: cache=%v sends=%v", cache.queries, tg.sends)
+	}
+}
+
+func TestChunkLinesSplitsLongUTF8Line(t *testing.T) {
+	input := strings.Repeat("广告", 2500)
+	chunks := chunkLines([]string{input}, messageChunkSize)
+	if len(chunks) < 2 {
+		t.Fatal("long line was not split")
+	}
+	var joined strings.Builder
+	for _, chunk := range chunks {
+		if len(chunk) > messageChunkSize || !utf8.ValidString(chunk) {
+			t.Fatalf("invalid chunk length or UTF-8: bytes=%d", len(chunk))
+		}
+		joined.WriteString(chunk)
+	}
+	if joined.String() != input {
+		t.Fatal("split chunks changed content")
 	}
 }

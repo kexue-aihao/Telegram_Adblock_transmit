@@ -34,6 +34,11 @@ func Apply(ctx context.Context, pool *pgxpool.Pool) error {
 		return fmt.Errorf("begin migrations: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// Serialize migrations across bot instances. The transaction-scoped lock
+	// is released automatically on commit or rollback.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(746179205617)`); err != nil {
+		return fmt.Errorf("lock migrations: %w", err)
+	}
 
 	if _, err := tx.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS telegram_schema_migrations (

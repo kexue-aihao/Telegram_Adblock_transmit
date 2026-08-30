@@ -7,10 +7,18 @@ server {
     # Configure certificates with your existing ACME/certificate setup.
     ssl_certificate     /etc/letsencrypt/live/telegram-api.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/telegram-api.example.com/privkey.pem;
+    server_tokens off;
+
+    # Bot tokens are part of /bot<TOKEN>/...; never record that request URI in
+    # an access log. Keep error-log access restricted as well.
+    access_log off;
 
     location / {
         proxy_pass http://telegram-bot-api:8081;
         proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_read_timeout 75s;
+        proxy_send_timeout 75s;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

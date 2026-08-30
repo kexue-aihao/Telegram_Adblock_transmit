@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -55,19 +56,21 @@ func run() error {
 	ruleStore := store.NewRuleRepository(pool)
 	auditStore := store.NewAuditRepository(pool)
 	cache := rules.NewMemoryCache()
-	botAPI, err := tgbotapi.NewBotAPIWithAPIEndpoint(cfg.BotToken, cfg.TelegramAPIEndpoint)
+	httpClient := &http.Client{Timeout: cfg.TelegramHTTPTimeout}
+	botAPI, err := tgbotapi.NewBotAPIWithClient(cfg.BotToken, cfg.TelegramAPIEndpoint, httpClient)
 	if err != nil {
-		return fmt.Errorf("initialize Telegram bot: %w", err)
+		return fmt.Errorf("initialize Telegram bot: %w", telegram.RedactTokenError(err, cfg.BotToken))
 	}
-	telegramClient := telegram.NewClient(botAPI)
+	telegramClient := telegram.NewClientWithAPIEndpoint(botAPI, cfg.TelegramAPIEndpoint)
 	service := moderation.NewService(ruleStore, cache, auditStore, telegramClient, logger)
+	service.SetBotUsername(botAPI.Self.UserName)
 	if err := service.LoadCache(ctx); err != nil {
 		return fmt.Errorf("load moderation rules: %w", err)
 	}
 
 	go retention.Run(ctx, auditStore, logger)
 	logger.Info("telegram moderation bot started", "bot_username", botAPI.Self.UserName)
-	poller := &telegram.Poller{Bot: botAPI, Timeout: 10, Logger: logger}
+	poller := &telegram.Poller{Bot: botAPI, APIEndpoint: cfg.TelegramAPIEndpoint, Timeout: 10, Logger: logger}
 	err = poller.Run(ctx, func(messageCtx context.Context, message domain.ModerationMessage) error {
 		_, handleErr := service.HandleUpdate(messageCtx, message)
 		return handleErr

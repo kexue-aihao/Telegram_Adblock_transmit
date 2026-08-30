@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
@@ -16,13 +19,21 @@ import (
 )
 
 // Client implements ports.TelegramClient using go-telegram-bot-api. The
-// upstream library predates forum topics, so SendMessage uses MakeRequest to
-// include message_thread_id when one is provided.
+// upstream library predates forum topics, so SendMessage uses a raw API
+// request to include message_thread_id when one is provided.
 type Client struct {
-	bot *tgbotapi.BotAPI
+	bot         *tgbotapi.BotAPI
+	apiEndpoint string
 }
 
 func NewClient(bot *tgbotapi.BotAPI) *Client { return &Client{bot: bot} }
+
+// NewClientWithAPIEndpoint creates a client whose moderation requests use
+// context-aware HTTP requests. The BotAPI instance must have been constructed
+// with the same endpoint and an HTTP client with a timeout.
+func NewClientWithAPIEndpoint(bot *tgbotapi.BotAPI, apiEndpoint string) *Client {
+	return &Client{bot: bot, apiEndpoint: apiEndpoint}
+}
 
 // NewTelegramClient is an explicit alias for integrations that prefer the
 // interface name in constructor calls.
@@ -46,7 +57,17 @@ func (c *Client) DeleteMessage(ctx context.Context, chatID int64, messageID int)
 	if c == nil || c.bot == nil {
 		return errors.New("telegram client is nil")
 	}
-	_, err := c.bot.Request(tgbotapi.DeleteMessageConfig{ChatID: chatID, MessageID: messageID})
+	if c.bot.Client == nil {
+		return errors.New("telegram HTTP client is nil")
+	}
+	if c.apiEndpoint == "" {
+		_, err := c.bot.Request(tgbotapi.DeleteMessageConfig{ChatID: chatID, MessageID: messageID})
+		return redactTelegramError(err, c.bot.Token)
+	}
+	_, err := c.makeRequest(ctx, "deleteMessage", url.Values{
+		"chat_id":    []string{strconv.FormatInt(chatID, 10)},
+		"message_id": []string{strconv.Itoa(messageID)},
+	})
 	return err
 }
 
@@ -57,27 +78,38 @@ func (c *Client) SendMessage(ctx context.Context, chatID int64, threadID *int, t
 	if c == nil || c.bot == nil {
 		return errors.New("telegram client is nil")
 	}
+	if c.bot.Client == nil {
+		return errors.New("telegram HTTP client is nil")
+	}
 	if text == "" {
 		return errors.New("telegram message text is empty")
 	}
-	params := tgbotapi.Params{
-		"chat_id": strconv.FormatInt(chatID, 10),
-		"text":    text,
-	}
-	if threadID != nil && *threadID > 0 {
-		params["message_thread_id"] = strconv.Itoa(*threadID)
-	}
-	response, err := c.bot.MakeRequest("sendMessage", params)
-	if err != nil {
-		return err
-	}
-	if response == nil || !response.Ok {
-		if response == nil {
-			return errors.New("telegram sendMessage returned an empty response")
+	if c.apiEndpoint == "" {
+		params := tgbotapi.Params{
+			"chat_id": strconv.FormatInt(chatID, 10),
+			"text":    text,
 		}
-		return fmt.Errorf("telegram sendMessage failed: %s", response.Description)
+		if threadID != nil && *threadID > 0 {
+			params["message_thread_id"] = strconv.Itoa(*threadID)
+		}
+		response, err := c.bot.MakeRequest("sendMessage", params)
+		if err != nil {
+			return redactTelegramError(err, c.bot.Token)
+		}
+		if response == nil || !response.Ok {
+			if response == nil {
+				return errors.New("telegram sendMessage returned an empty response")
+			}
+			return fmt.Errorf("telegram sendMessage failed: %s", response.Description)
+		}
+		return nil
 	}
-	return nil
+	params := url.Values{"chat_id": []string{strconv.FormatInt(chatID, 10)}, "text": []string{text}}
+	if threadID != nil && *threadID > 0 {
+		params.Set("message_thread_id", strconv.Itoa(*threadID))
+	}
+	_, err := c.makeRequest(ctx, "sendMessage", params)
+	return err
 }
 
 func (c *Client) IsGroupAdmin(ctx context.Context, chatID, userID int64) (bool, error) {
@@ -87,14 +119,86 @@ func (c *Client) IsGroupAdmin(ctx context.Context, chatID, userID int64) (bool, 
 	if c == nil || c.bot == nil {
 		return false, errors.New("telegram client is nil")
 	}
-	member, err := c.bot.GetChatMember(tgbotapi.GetChatMemberConfig{
-		ChatConfigWithUser: tgbotapi.ChatConfigWithUser{ChatID: chatID, UserID: userID},
+	if c.bot.Client == nil {
+		return false, errors.New("telegram HTTP client is nil")
+	}
+	if c.apiEndpoint == "" {
+		member, err := c.bot.GetChatMember(tgbotapi.GetChatMemberConfig{
+			ChatConfigWithUser: tgbotapi.ChatConfigWithUser{ChatID: chatID, UserID: userID},
+		})
+		if err != nil {
+			return false, redactTelegramError(err, c.bot.Token)
+		}
+		return member.Status == "creator" || member.Status == "owner" || member.Status == "administrator", nil
+	}
+	response, err := c.makeRequest(ctx, "getChatMember", url.Values{
+		"chat_id": []string{strconv.FormatInt(chatID, 10)},
+		"user_id": []string{strconv.FormatInt(userID, 10)},
 	})
 	if err != nil {
 		return false, err
 	}
+	var member tgbotapi.ChatMember
+	if err := json.Unmarshal(response.Result, &member); err != nil {
+		return false, fmt.Errorf("decode Telegram chat member: %w", err)
+	}
 	return member.Status == "creator" || member.Status == "owner" || member.Status == "administrator", nil
 }
+
+func (c *Client) makeRequest(ctx context.Context, method string, params url.Values) (*tgbotapi.APIResponse, error) {
+	if c.apiEndpoint == "" {
+		return nil, errors.New("telegram API endpoint is required for context-aware requests")
+	}
+	requestURL := fmt.Sprintf(c.apiEndpoint, c.bot.Token, method)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, strings.NewReader(params.Encode()))
+	if err != nil {
+		return nil, redactTelegramError(fmt.Errorf("create Telegram %s request: %w", method, err), c.bot.Token)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.bot.Client.Do(req)
+	if err != nil {
+		return nil, redactTelegramError(err, c.bot.Token)
+	}
+	defer resp.Body.Close()
+
+	var response tgbotapi.APIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, fmt.Errorf("decode Telegram %s response: %w", method, err)
+	}
+	if !response.Ok {
+		var parameters tgbotapi.ResponseParameters
+		if response.Parameters != nil {
+			parameters = *response.Parameters
+		}
+		return nil, tgbotapi.Error{Code: response.ErrorCode, Message: response.Description, ResponseParameters: parameters}
+	}
+	return &response, nil
+}
+
+// redactTelegramError keeps cancellation and timeout matching intact while
+// removing the bot token that net/http includes in URL-related errors.
+func redactTelegramError(err error, token string) error {
+	if err == nil || token == "" || !strings.Contains(err.Error(), token) {
+		return err
+	}
+	return &redactedError{message: strings.ReplaceAll(err.Error(), token, "<redacted>"), cause: err}
+}
+
+// RedactTokenError is provided for startup and integration errors that occur
+// outside Client methods but may still include the Bot API URL.
+func RedactTokenError(err error, token string) error {
+	return redactTelegramError(err, token)
+}
+
+type redactedError struct {
+	message string
+	cause   error
+}
+
+func (e *redactedError) Error() string { return e.message }
+
+func (e *redactedError) Unwrap() error { return e.cause }
 
 // FromUpdate converts a library update into the domain message. The boolean
 // is false when the update is unrelated to a group message.

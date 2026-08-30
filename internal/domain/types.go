@@ -3,9 +3,11 @@ package domain
 import "time"
 
 const (
-	MaxPatternLength   = 512
-	AuditSummaryLimit  = 120
-	AuditRetentionDays = 30
+	MaxPatternLength      = 512
+	MaxRulesPerChat       = 100
+	MaxPatternTotalLength = 32768
+	AuditSummaryLimit     = 120
+	AuditRetentionDays    = 30
 )
 
 type Rule struct {
