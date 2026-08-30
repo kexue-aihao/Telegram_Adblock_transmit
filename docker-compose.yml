@@ -1,0 +1,34 @@
+services:
+  bot:
+    image: ${BOT_IMAGE:-ghcr.io/kexue-aihao/telegram-adblock-transmit:latest}
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?set BOT_TOKEN in .env}
+      TELEGRAM_API_ENDPOINT: ${TELEGRAM_API_ENDPOINT:-https://api.telegram.org/bot%s/%s}
+      DATABASE_URL: postgres://telegram_bot:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/telegram_adblock?sslmode=disable
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    stop_grace_period: 20s
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: telegram_adblock
+      POSTGRES_USER: telegram_bot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telegram_bot -d telegram_adblock"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

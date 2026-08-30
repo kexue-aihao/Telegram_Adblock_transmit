@@ -1,0 +1,8 @@
+# Caddy reverse proxy for a self-hosted Telegram Bot API Server.
+# Replace the domain and upstream name with your deployment values.
+telegram-api.example.com {
+    reverse_proxy telegram-bot-api:8081
+}
+
+# The moderation bot itself uses long polling and does not expose an HTTP site.
+# Do not proxy the bot container as if it were a web application.

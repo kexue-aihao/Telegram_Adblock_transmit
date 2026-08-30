@@ -1,0 +1,19 @@
+# Nginx reverse proxy for a self-hosted Telegram Bot API Server.
+# Put this server block in the HTTPS virtual host for your domain.
+server {
+    listen 443 ssl http2;
+    server_name telegram-api.example.com;
+
+    # Configure certificates with your existing ACME/certificate setup.
+    ssl_certificate     /etc/letsencrypt/live/telegram-api.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/telegram-api.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://telegram-bot-api:8081;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
