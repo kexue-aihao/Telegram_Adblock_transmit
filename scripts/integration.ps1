@@ -24,9 +24,22 @@ try {
     docker compose -p $projectName exec -T postgres psql -U telegram_bot -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $testDatabase WITH (FORCE);"
     docker compose -p $projectName exec -T postgres psql -U telegram_bot -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE $testDatabase;"
 
-    $migration = Get-Content (Join-Path $PSScriptRoot "..\migrations\0001_initial.sql") -Raw
-    $upSQL = ($migration -split "(?m)^-- \+goose Down")[0] -replace "(?m)^-- \+goose Up\s*", ""
-    $upSQL | docker compose -p $projectName exec -T postgres psql -U telegram_bot -d $testDatabase -v ON_ERROR_STOP=1
+    # Apply every embedded migration in filename order so integration runs match
+    # the bot's startup migrations exactly (scripts/applied in production).
+    $migrationsDir = Join-Path $PSScriptRoot "..\migrations"
+    $applied = 0
+    foreach ($migrationFile in (Get-ChildItem (Join-Path $migrationsDir "*.sql") | Sort-Object Name)) {
+        $migration = Get-Content $migrationFile.FullName -Raw
+        $upSQL = ($migration -split "(?m)^-- \+goose Down")[0] -replace "(?m)^-- \+goose Up\s*", ""
+        $upSQL | docker compose -p $projectName exec -T postgres psql -U telegram_bot -d $testDatabase -v ON_ERROR_STOP=1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to apply migration $($migrationFile.Name)"
+        }
+        $applied++
+    }
+    if ($applied -lt 1) {
+        throw "No migration files found under $migrationsDir"
+    }
 
     # Run the Go test inside a short-lived Go container on the Compose network;
     # PostgreSQL is intentionally not published to the host in deployment.

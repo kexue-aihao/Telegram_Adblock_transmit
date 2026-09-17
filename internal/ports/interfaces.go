@@ -13,6 +13,7 @@ type RuleStore interface {
 	List(ctx context.Context, chatID int64) ([]domain.Rule, error)
 	Remove(ctx context.Context, chatID, ruleID int64) error
 	SetEnabled(ctx context.Context, chatID, ruleID int64, enabled bool) error
+	UpdatePattern(ctx context.Context, chatID, ruleID int64, pattern string) (domain.Rule, error)
 }
 
 type RuleCache interface {

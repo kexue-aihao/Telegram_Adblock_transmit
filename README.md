@@ -2,7 +2,7 @@
 
 这是一个使用 Go 编写的 Telegram 群组广告拦截机器人。它通过 Telegram Bot API 接收群组消息，使用 Go RE2 正则表达式检查文本和媒体说明，命中规则后删除消息，并在原来的话题中发送提示。
 
-项目适合部署在自己的 Linux 服务器上。推荐使用 1Panel 管理 Docker Compose、PostgreSQL、域名证书和反向代理。机器人本身没有网页管理后台，也不监听网站 HTTP 端口；需要域名时，域名应指向独立的 Telegram Bot API Server，而不是 bot 容器。
+项目适合部署在自己的 Linux 服务器上。推荐使用 1Panel 管理 Docker Compose、PostgreSQL、域名证书和反向代理。机器人提供可选的 Web 管理面板（默认关闭，见[第 6 节](#6-web-管理面板可选)）；需要域名时，Bot API 域名应指向独立的 Telegram Bot API Server，而面板域名应指向 `bot` 容器。
 
 ## 1. 程序介绍
 
@@ -18,7 +18,7 @@
 
 ### 不包含的功能
 
-- 不提供网页控制台或用户登录页面。
+- 面板默认关闭，需要显式启用（见[第 6 节](#6-web-管理面板可选)）。
 - 不扫描历史消息、贴纸、文件名、OCR、语音或视频语音。
 - 不自动禁言、踢出或封禁成员。
 - 不自动安装或启动 Telegram Bot API Server，该服务需要单独部署。
@@ -267,7 +267,7 @@ TELEGRAM_ALLOW_INSECURE_HTTP=false
 
 ### 5.4 使用 1Panel 网站反向代理
 
-反向代理的目标是自建 Bot API Server，不是 `bot` 容器：
+本小节的 Bot API 域名反向代理目标是自建 Bot API Server，不是 `bot` 容器（Web 面板的代理目标见[第 6 节](#6-web-管理面板可选)）：
 
 1. 在 DNS 中将 `telegram-api.example.com` 的 A/AAAA 记录指向服务器。
 2. 在 1Panel 打开“网站 -> 创建网站”，选择“反向代理”，或先创建站点后添加反向代理。
@@ -305,7 +305,53 @@ curl -fsS https://telegram-api.example.com/bot<YOUR_TOKEN>/getMe
 
 命令输出中不要保留 Token，也不要把完整命令和输出复制到公共工单。
 
-## 6. 配置参考
+## 6. Web 管理面板（可选）
+
+面板与机器人运行在同一进程、同一容器内，共享数据库连接和内存规则缓存，因此通过面板修改规则后立即生效，无需重启机器人。
+
+### 6.1 启用
+
+面板默认关闭。在 `.env` 中设置以下变量后重建 bot 容器：
+
+~~~env
+WEBUI_ADDR=0.0.0.0:8080
+WEBUI_USERNAME=admin
+WEBUI_PASSWORD=replace-with-a-long-random-password
+# 可选：固定会话签名密钥，让已登录会话跨重启保持；不设则每次重启后需重新登录。
+# WEBUI_SESSION_SECRET=replace-with-32-plus-random-bytes
+~~~
+
+`WEBUI_ADDR` 留空则禁用面板（默认）。启用时必须同时设置 `WEBUI_USERNAME` 和 `WEBUI_PASSWORD`，否则进程启动报错。容器默认不向宿主机发布面板端口。
+
+### 6.2 访问与 HTTPS
+
+生产环境建议用 1Panel 反向代理以 HTTPS 访问面板，不要直接暴露 8080：
+
+1. 在 DNS 中将 `panel.example.com` 的 A/AAAA 记录指向服务器（面板域名需与 Bot API 域名不同）。
+2. 在 1Panel 打开“网站 -> 创建网站”，选择“反向代理”，上游填写 `http://bot:8080`（1Panel 网站代理在 Docker 网络中时），并申请启用 SSL。
+3. 面板站点可以保留 access log，便于观察登录暴力尝试；面板请求 URI 中不含 Bot Token。
+
+仓库中的代理模板可直接参考：
+
+- [Nginx 配置示例](deploy/nginx.panel.conf.example)
+- [Caddy 配置示例](deploy/Caddyfile.panel.example)
+
+不使用反向代理时，请将 `WEBUI_ADDR` 绑定为 `127.0.0.1:8080`，或确保防火墙只允许可信主机访问 8080。
+
+### 6.3 功能
+
+- **仪表盘**：群组数、规则总数/启用数、今日命中与删除成功/失败、近 7 日与累计拦截统计，以及近 30 天拦截趋势图。
+- **规则管理**：按群组新增、编辑、启用/停用、删除规则；输入时实时校验 RE2 语法，并提供「测试匹配」干跑；通过面板新建的规则创建者为 `-1`。
+- **审计日志**：按群组、日期、删除结果和命中规则过滤，分页浏览，可查看单条详情。
+- **缓存同步**：任何面板写入都会立即刷新进程内规则缓存；「刷新规则缓存」按钮可强制从数据库全量重载（例如直接修改数据库后使用）。
+
+健康检查（可配置到 1Panel 或外部探活，容器内无 shell）：
+
+~~~bash
+curl -fsS http://127.0.0.1:8080/healthz   # 返回 ok
+~~~
+
+## 7. 配置参考
 
 | 变量 | Compose 默认值 | 是否必需 | 说明 |
 | --- | --- | --- | --- |
@@ -317,17 +363,22 @@ curl -fsS https://telegram-api.example.com/bot<YOUR_TOKEN>/getMe
 | `TELEGRAM_HTTP_TIMEOUT` | `30s` | 否 | Telegram API 请求超时，必须为正时长 |
 | `LOG_LEVEL` | `INFO` | 否 | `DEBUG`、`INFO`、`WARN` 或 `ERROR` |
 | `DATABASE_URL` | Compose 自动生成 | 本地运行时必需 | 标准 PostgreSQL DSN，不要使用 SQLAlchemy URL |
+| `WEBUI_ADDR` | 空（面板关闭） | 否 | Web 管理面板监听地址，如 `0.0.0.0:8080`；非空时面板启用 |
+| `WEBUI_USERNAME` | 无 | 面板启用时必需 | 面板登录用户名，仅允许字母、数字、`_ . -`，1-64 字符 |
+| `WEBUI_PASSWORD` | 无 | 面板启用时必需 | 面板登录密码，请使用长随机值 |
+| `WEBUI_SESSION_SECRET` | 无 | 否 | 会话签名密钥；固定后重启不登出，不设则每次重启需重新登录 |
 
 端点安全规则：HTTPS 默认允许；HTTP 必须设置 `TELEGRAM_ALLOW_INSECURE_HTTP=true`，并且主机只能是回环地址、私网 IP、`localhost`、`host.docker.internal`、`gateway.docker.internal` 或单标签 Docker 服务名。
 
-## 7. 升级、回滚和备份
+## 8. 升级、回滚和备份
 
 ### 升级
 
 1. 在 1Panel 中备份 `postgres_data` 卷，并保存 `.env` 的加密副本。
-2. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.1.0`。
-3. 在编排详情中执行拉取镜像并重新创建/启动服务。
-4. 查看 PostgreSQL 健康状态和 bot 日志，确认 bot 没有反复重启。
+2. 可选项：如果你计划使用 Web 面板，先在 `.env` 设置 `WEBUI_ADDR`、`WEBUI_USERNAME`、`WEBUI_PASSWORD`（面板默认关闭，不设置不影响升级；启用后缺凭据会导致启动校验失败）。
+3. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.1.0`。
+4. 在编排详情中执行拉取镜像并重新创建/启动服务。
+5. 查看 PostgreSQL 健康状态和 bot 日志，确认 bot 没有反复重启。
 
 迁移在 bot 启动时自动执行，只会创建或更新所需结构，不会自动删除表或清空旧数据。升级前仍应保留数据库备份。
 
@@ -345,7 +396,7 @@ curl -fsS https://telegram-api.example.com/bot<YOUR_TOKEN>/getMe
 
 恢复前先停止 bot，避免恢复期间产生新的写入。确认数据库恢复完成后再启动 bot。
 
-## 8. 常见问题
+## 9. 常见问题
 
 ### bot 容器反复重启
 
@@ -377,13 +428,13 @@ curl -fsS https://telegram-api.example.com/bot<YOUR_TOKEN>/getMe
 
 ### 访问 Bot API 域名看不到网页
 
-这是正常的。本项目没有网页端点；该域名只用于转发 Telegram Bot API 请求。不要把反向代理目标填写为 bot 容器。
+这是正常的。该域名只用于转发 Telegram Bot API 请求，不提供网页。不要把 Bot API 域名的反向代理目标填写为 `bot` 容器；Web 管理面板使用独立的域名（见[第 6 节](#6-web-管理面板可选)）。
 
 ### 规则命令没有生效
 
 只有群组管理员可以管理规则。规则使用 Go RE2 语法；不支持 lookaround、反向引用等 PCRE/Python 特性。规则数量和总长度达到上限时，命令会返回配额提示。
 
-## 9. 源码运行和开发
+## 10. 源码运行和开发
 
 本地运行需要 Go 1.26+ 和 PostgreSQL：
 
@@ -392,6 +443,15 @@ export BOT_TOKEN='...'
 export DATABASE_URL='postgres://telegram_bot:password@127.0.0.1:5432/telegram_adblock?sslmode=disable'
 export LOG_LEVEL=INFO
 go run ./cmd/bot
+~~~
+
+本地开发默认关闭面板。如需在本地查看面板，额外设置：
+
+~~~bash
+export WEBUI_ADDR='127.0.0.1:8080'
+export WEBUI_USERNAME='admin'
+export WEBUI_PASSWORD='...'
+# go run ./cmd/bot 后访问 http://127.0.0.1:8080
 ~~~
 
 使用本地自建 Bot API 时：
@@ -412,23 +472,29 @@ gofmt -l .
 
 GitHub Actions 会在 `master` 分支和 `v*.*.*` 标签上构建并发布多架构镜像，同时执行测试、依赖校验、Trivy 扫描、SBOM 和 provenance 生成。Pull Request 会执行测试和不发布镜像的 Docker 构建。
 
-## 10. 安全清单
+## 11. 安全清单
 
-- Bot Token 只放在 1Panel 的 `.env` 或受控密钥存储中。
+- Bot Token 只放在 1Panel 的 `.env` 或受控密钥存储中；会话密钥 `WEBUI_SESSION_SECRET` 同样只放在 `.env`。
 - 生产环境固定 `BOT_IMAGE` 版本或摘要。
 - 关闭 Bot API 反向代理的 access log，或确认已脱敏 URI。
 - 不公开 PostgreSQL 5432 和 Bot API Server 8081。
+- 面板通过 1Panel 反向代理以 HTTPS 访问，不要公开暴露 8080；不使用反向代理时绑定 `127.0.0.1` 或由防火墙限制。
+- 为面板设置独立强密码，不要与服务器 SSH 或其他服务共用；面板用户名仅限字母数字 `_ . -`。
+- 不设置 `WEBUI_SESSION_SECRET` 时，重启后旧会话全部失效（新会话需重新登录）。
 - 同一 Bot Token 只运行一个 bot 编排实例。
 - 定期备份 PostgreSQL 数据和加密后的 `.env`。
 - 定期更新 1Panel、Docker、PostgreSQL 和镜像摘要。
 - 发生 Token 泄露时，立即在 BotFather 重新生成 Token，并更新 `.env` 后重建 bot 容器。
 
-## 11. 项目文件
+## 12. 项目文件
 
 - `docker-compose.yml`：本地源码构建配置。
 - `docker-compose.pull.yml`：生产环境拉取 GHCR 镜像的配置。
 - `.env.example`：环境变量模板。
 - `scripts/deploy.ps1`：PowerShell 一键拉取和启动脚本，适合 Windows 管理机。
-- `deploy/nginx.telegram-api.conf.example`：Nginx 反向代理模板。
-- `deploy/Caddyfile.example`：Caddy 反向代理模板。
+- `deploy/nginx.telegram-api.conf.example`：自建 Bot API Server 的 Nginx 反向代理模板。
+- `deploy/Caddyfile.example`：Bot API Server 的 Caddy 反向代理模板。
+- `deploy/nginx.panel.conf.example`：Web 管理面板的 Nginx 反向代理模板。
+- `deploy/Caddyfile.panel.example`：Web 管理面板的 Caddy 反向代理模板。
+- `internal/webui/`：Web 管理面板（HTTP 服务、认证、前端静态资源）。
 - `migrations/`：数据库迁移，启动时自动执行。

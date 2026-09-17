@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -18,7 +19,21 @@ type Config struct {
 	TelegramAPIEndpoint string
 	TelegramHTTPTimeout time.Duration
 	LogLevel            string
+
+	// WebUIAddr is the panel listen address, e.g. "0.0.0.0:8080" or "127.0.0.1:8080".
+	// Empty disables the panel (the default), so existing deployments upgrade
+	// without any new required variables.
+	WebUIAddr string
+	// WebUIUsername and WebUIPassword are required whenever WebUIAddr is set.
+	WebUIUsername string
+	WebUIPassword string
+	// WebUISessionSecret signs session cookies. Optional: when unset, a fresh
+	// random key is generated at startup, invalidating all sessions on restart.
+	WebUISessionSecret string
 }
+
+// WebUIEnabled reports whether the panel HTTP server should be started.
+func (c Config) WebUIEnabled() bool { return c.WebUIAddr != "" }
 
 func Load() (Config, error) {
 	cfg := Config{
@@ -27,6 +42,10 @@ func Load() (Config, error) {
 		TelegramAPIEndpoint: os.Getenv("TELEGRAM_API_ENDPOINT"),
 		TelegramHTTPTimeout: defaultTelegramHTTPTimeout,
 		LogLevel:            os.Getenv("LOG_LEVEL"),
+		WebUIAddr:           os.Getenv("WEBUI_ADDR"),
+		WebUIUsername:       os.Getenv("WEBUI_USERNAME"),
+		WebUIPassword:       os.Getenv("WEBUI_PASSWORD"),
+		WebUISessionSecret:  os.Getenv("WEBUI_SESSION_SECRET"),
 	}
 	if cfg.BotToken == "" {
 		return Config{}, fmt.Errorf("BOT_TOKEN must be set")
@@ -54,7 +73,36 @@ func Load() (Config, error) {
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "INFO"
 	}
+	if err := validateWebUI(cfg); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+var webUIUsernamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
+
+func validateWebUI(cfg Config) error {
+	if !cfg.WebUIEnabled() {
+		return nil
+	}
+	host, portStr, err := net.SplitHostPort(cfg.WebUIAddr)
+	if err != nil {
+		return fmt.Errorf("WEBUI_ADDR must be a host:port address: %q", cfg.WebUIAddr)
+	}
+	if host == "" {
+		return fmt.Errorf("WEBUI_ADDR must include a listen host (e.g. 127.0.0.1:8080), got %q", cfg.WebUIAddr)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port < 1 || port > 65535 {
+		return fmt.Errorf("WEBUI_ADDR port must be between 1 and 65535: %q", cfg.WebUIAddr)
+	}
+	if cfg.WebUIUsername == "" || cfg.WebUIPassword == "" {
+		return fmt.Errorf("WEBUI_ADDR is set so WEBUI_USERNAME and WEBUI_PASSWORD must both be set (leave WEBUI_ADDR empty to disable the panel)")
+	}
+	if !webUIUsernamePattern.MatchString(cfg.WebUIUsername) {
+		return fmt.Errorf("WEBUI_USERNAME may only contain A-Z a-z 0-9 _ . - (1-64 characters)")
+	}
+	return nil
 }
 
 func parseBoolEnv(name string) (bool, error) {

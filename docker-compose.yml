@@ -24,10 +24,18 @@ services:
       TELEGRAM_HTTP_TIMEOUT: ${TELEGRAM_HTTP_TIMEOUT:-30s}
       DATABASE_URL: postgres://telegram_bot:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/telegram_adblock?sslmode=disable
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Web 管理面板（可选）。WEBUI_ADDR 留空则禁用；启用时需同时设置用户名和密码。
+      WEBUI_ADDR: ${WEBUI_ADDR:-}
+      WEBUI_USERNAME: ${WEBUI_USERNAME:-}
+      WEBUI_PASSWORD: ${WEBUI_PASSWORD:-}
+      WEBUI_SESSION_SECRET: ${WEBUI_SESSION_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
     stop_grace_period: 20s
+    # 可选：仅绑定宿主机回环地址暴露面板（不推荐，建议用 1Panel 反向代理走 HTTPS）：
+    # ports:
+    #   - "127.0.0.1:8080:8080"
 
   postgres:
     image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685

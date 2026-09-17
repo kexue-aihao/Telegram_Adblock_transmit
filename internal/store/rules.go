@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
@@ -155,6 +156,88 @@ func (r *RuleRepository) Remove(ctx context.Context, chatID, ruleID int64) error
 	return nil
 }
 
+// UpdatePattern validates and rewrites one rule's pattern, re-checking the
+// per-chat total-pattern quota against the chat's *other* rules. It mirrors
+// Add's transaction shape (advisory lock + quota check) so the limits stay
+// guaranteed even with concurrent panel and command writes.
+func (r *RuleRepository) UpdatePattern(ctx context.Context, chatID, ruleID int64, pattern string) (domain.Rule, error) {
+	if err := r.validate(); err != nil {
+		return domain.Rule{}, err
+	}
+	if _, err := rules.ValidatePattern(pattern); err != nil {
+		return domain.Rule{}, err
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return domain.Rule{}, fmt.Errorf("begin update rule transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1::bigint)`, chatID); err != nil {
+		return domain.Rule{}, fmt.Errorf("lock chat rule quota: %w", err)
+	}
+
+	var otherPatternChars int64
+	if err := tx.QueryRow(ctx, `
+		SELECT COALESCE(SUM(char_length(pattern)), 0)
+		FROM moderation_rules WHERE chat_id = $1 AND id <> $2`, chatID, ruleID).Scan(&otherPatternChars); err != nil {
+		return domain.Rule{}, fmt.Errorf("check moderation rule quota: %w", err)
+	}
+	newPatternChars := int64(utf8.RuneCountInString(pattern))
+	if otherPatternChars+newPatternChars > domain.MaxPatternTotalLength {
+		return domain.Rule{}, fmt.Errorf("%w: max %d pattern characters per chat", ErrRuleLimitExceeded, domain.MaxPatternTotalLength)
+	}
+
+	var result domain.Rule
+	err = tx.QueryRow(ctx, `
+		UPDATE moderation_rules
+		SET pattern = $1, updated_at = NOW()
+		WHERE chat_id = $2 AND id = $3
+		RETURNING id, chat_id, pattern, enabled, created_by, created_at, updated_at`,
+		pattern, chatID, ruleID).Scan(
+		&result.ID, &result.ChatID, &result.Pattern, &result.Enabled,
+		&result.CreatedBy, &result.CreatedAt, &result.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Rule{}, ErrRuleNotFound
+		}
+		return domain.Rule{}, fmt.Errorf("update rule %d: %w", ruleID, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Rule{}, fmt.Errorf("commit update rule: %w", err)
+	}
+	return result, nil
+}
+
+func (r *RuleRepository) ListChats(ctx context.Context) ([]domain.ChatSummary, error) {
+	if err := r.validate(); err != nil {
+		return nil, err
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT g.chat_id, COALESCE(g.title, ''),
+		       COUNT(r.id),
+		       COUNT(r.id) FILTER (WHERE r.enabled)
+		FROM chat_groups g
+		LEFT JOIN moderation_rules r ON r.chat_id = g.chat_id
+		GROUP BY g.chat_id
+		ORDER BY g.chat_id`)
+	if err != nil {
+		return nil, fmt.Errorf("list chat groups: %w", err)
+	}
+	defer rows.Close()
+	chats := make([]domain.ChatSummary, 0)
+	for rows.Next() {
+		var chat domain.ChatSummary
+		if err := rows.Scan(&chat.ID, &chat.Title, &chat.RuleCount, &chat.EnabledCount); err != nil {
+			return nil, fmt.Errorf("scan chat group: %w", err)
+		}
+		chats = append(chats, chat)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate chat groups: %w", err)
+	}
+	return chats, nil
+}
+
 func (r *RuleRepository) SetEnabled(ctx context.Context, chatID, ruleID int64, enabled bool) error {
 	if err := r.validate(); err != nil {
 		return err
@@ -198,5 +281,6 @@ func nullableTitle(title string) any {
 	return title
 }
 
-// Compile-time assertion keeps accidental interface drift visible.
+// Compile-time assertions keep accidental interface drift visible.
 var _ ports.RuleStore = (*RuleRepository)(nil)
+var _ ports.ChatStore = (*RuleRepository)(nil)

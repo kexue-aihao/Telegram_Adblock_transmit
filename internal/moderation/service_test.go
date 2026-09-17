@@ -70,6 +70,9 @@ func (*fakeRules) Add(context.Context, domain.NewRule) (domain.Rule, error) {
 func (*fakeRules) List(context.Context, int64) ([]domain.Rule, error)   { return nil, nil }
 func (*fakeRules) Remove(context.Context, int64, int64) error           { return nil }
 func (*fakeRules) SetEnabled(context.Context, int64, int64, bool) error { return nil }
+func (*fakeRules) UpdatePattern(context.Context, int64, int64, string) (domain.Rule, error) {
+	return domain.Rule{}, nil
+}
 
 func testMessage() domain.ModerationMessage {
 	userID := int64(42)

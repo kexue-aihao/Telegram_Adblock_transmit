@@ -1,0 +1,12 @@
+# Caddy reverse proxy for the WebUI management panel.
+# Replace the domain and upstream name with your deployment values.
+# Unlike the Bot API site, panel URIs contain no secrets, so the access log is
+# kept intentionally: it makes brute-force login attempts visible.
+panel.example.com {
+    reverse_proxy bot:8080 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+    }
+
+    encode zstd gzip
+}

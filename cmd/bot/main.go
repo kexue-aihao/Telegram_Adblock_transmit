@@ -22,6 +22,7 @@ import (
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/rules"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/store"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/telegram"
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/webui"
 	"github.com/kexue-aihao/telegram-adblock-transmit/migrations"
 )
 
@@ -66,6 +67,29 @@ func run() error {
 	service.SetBotUsername(botAPI.Self.UserName)
 	if err := service.LoadCache(ctx); err != nil {
 		return fmt.Errorf("load moderation rules: %w", err)
+	}
+
+	if cfg.WebUIEnabled() {
+		panel, err := webui.New(webui.Options{
+			Addr:          cfg.WebUIAddr,
+			RuleStore:     ruleStore,
+			ChatStore:     ruleStore,
+			AuditStore:    auditStore,
+			Refresher:     service,
+			Username:      cfg.WebUIUsername,
+			Password:      cfg.WebUIPassword,
+			SessionSecret: []byte(cfg.WebUISessionSecret),
+			Logger:        logger,
+		})
+		if err != nil {
+			return err
+		}
+		go func() {
+			if runErr := panel.Run(ctx); runErr != nil && !errors.Is(runErr, http.ErrServerClosed) {
+				logger.Error("webui panel server failed", "addr", cfg.WebUIAddr, "error", runErr)
+			}
+		}()
+		logger.Info("webui panel started", "addr", cfg.WebUIAddr)
 	}
 
 	go retention.Run(ctx, auditStore, logger)

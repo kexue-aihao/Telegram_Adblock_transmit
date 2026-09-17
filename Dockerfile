@@ -21,4 +21,9 @@ FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c
 COPY --from=build /out/telegram-adblock /telegram-adblock
 
 USER nonroot:nonroot
+
+# The WebUI panel listens on 8080 when WEBUI_ADDR is set. Informational only:
+# the port stays internal to the Docker network unless you publish it.
+EXPOSE 8080
+
 ENTRYPOINT ["/telegram-adblock"]
