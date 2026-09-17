@@ -35,9 +35,10 @@ services:
       postgres:
         condition: service_healthy
     stop_grace_period: 20s
-    # 可选：仅绑定宿主机回环地址暴露面板（不推荐，建议用 1Panel 反向代理走 HTTPS）：
-    # ports:
-    #   - "127.0.0.1:8080:8080"
+    # 发布到宿主机回环地址（仅本机可达，不暴露公网），供 1Panel 反向代理访问。
+    # 若反代容器运行在 Docker 网络（非 host 模式），可删除 ports 并将上游指向 http://bot:8080。
+    ports:
+      - "127.0.0.1:8080:8080"
 
   postgres:
     image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685

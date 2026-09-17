@@ -191,9 +191,9 @@ if [[ "$PANEL_ENABLED" == "1" ]]; then
   say ""
   say "Web 管理面板已启用，接下来只需配置反向代理:"
   say "  1. 在 1Panel「网站 -> 创建网站 -> 反向代理」新建面板域名（需与 Bot 无关的独立域名）。"
-  say "  2. 上游地址填 http://bot:8080（1Panel 代理容器在 Docker 网络时），申请并启用 SSL 证书。"
+  say "  2. 上游地址填 http://127.0.0.1:8080（compose 已发布到宿主机回环地址），申请并启用 SSL 证书。"
   say "  3. 访问 https://<面板域名> 登录。若登录失效，secret 已固定在 .env 的 WEBUI_SESSION_SECRET。"
-  say "面板地址: http://<服务器IP>:8080（仅供本机/内网临时访问，生产请走上面的 HTTPS 反向代理）"
+  say "面板地址（仅服务器本机可访问）: http://127.0.0.1:8080；公网访问请走上面的 HTTPS 反向代理"
 else
   say ""
   say "Web 管理面板未启用。如需启用，编辑 $DEPLOY_DIR/.env 填入 WEBUI_ADDR / WEBUI_USERNAME / WEBUI_PASSWORD，然后执行:"

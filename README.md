@@ -345,14 +345,14 @@ WEBUI_PASSWORD=replace-with-a-long-random-password
 # WEBUI_SESSION_SECRET=replace-with-32-plus-random-bytes
 ~~~
 
-`WEBUI_ADDR` 留空则禁用面板（默认）。启用时必须同时设置 `WEBUI_USERNAME` 和 `WEBUI_PASSWORD`，否则进程启动报错。容器默认不向宿主机发布面板端口。
+`WEBUI_ADDR` 留空则禁用面板（默认）。启用时必须同时设置 `WEBUI_USERNAME` 和 `WEBUI_PASSWORD`，否则进程启动报错。compose 默认把面板端口发布到宿主机回环地址 `127.0.0.1:8080`（仅本机可达，不暴露公网），供 1Panel 反向代理访问。
 
 ### 6.2 访问与 HTTPS
 
 生产环境建议用 1Panel 反向代理以 HTTPS 访问面板，不要直接暴露 8080：
 
 1. 在 DNS 中将 `panel.example.com` 的 A/AAAA 记录指向服务器（面板域名需与 Bot API 域名不同）。
-2. 在 1Panel 打开“网站 -> 创建网站”，选择“反向代理”，上游填写 `http://bot:8080`（1Panel 网站代理在 Docker 网络中时），并申请启用 SSL。
+2. 在 1Panel 打开“网站 -> 创建网站”，选择“反向代理”，上游填写 `http://127.0.0.1:8080`（1Panel 默认以 host 网络模式的 OpenResty 反代，直接访问宿主机回环地址即可）。如果反代容器运行在 Docker 网络中，改为 `http://bot:8080` 并删除 compose 中的 ports 发布。填写后申请并启用 SSL。
 3. 面板站点可以保留 access log，便于观察登录暴力尝试；面板请求 URI 中不含 Bot Token。
 
 仓库中的代理模板可直接参考：
