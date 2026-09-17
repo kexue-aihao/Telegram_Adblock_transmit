@@ -6,7 +6,7 @@
   --surface3: #262c3b;
   --border: #2a3142;
   --text: #eef1f6;
-  --muted: #a3adbd;
+  --muted: #b3bdcb;
   --accent: #7aa2ff;
   --accent-strong: #5b8cff;
   --accent-soft: rgba(90, 140, 255, 0.16);
@@ -45,7 +45,7 @@
   --surface3: #e3e8f2;
   --border: #d5dbe8;
   --text: #1c2130;
-  --muted: #676f7f;
+  --muted: #5d6878;
   --accent: #275fc4;
   --accent-strong: #2457b8;
   --accent-soft: rgba(39, 95, 196, 0.11);
@@ -190,7 +190,7 @@ input:focus, select:focus, textarea:focus {
 }
 .nav-logout { border-top: 1px solid var(--glass-border); border-radius: 0; padding-top: 14px; margin-top: 8px; }
 
-.view { flex: 1; padding: 24px 28px; max-width: 1200px; }
+.view { flex: 1; padding: 24px 28px; max-width: none; }
 .view h2 { margin: 0 0 4px; font-size: 21px; font-weight: 680; letter-spacing: 0.01em; }
 .view .page-desc { color: var(--muted); margin: 0 0 20px; }
 
@@ -256,7 +256,7 @@ input:focus, select:focus, textarea:focus {
   box-shadow: var(--shadow-soft);
 }
 .stats-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 14px; margin-bottom: 20px;
 }
 .stat {
