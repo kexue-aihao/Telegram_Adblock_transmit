@@ -43,20 +43,20 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 	})
 }
 
-// securityHeaders applies hardening headers to every response. API responses
-// are additionally kept out of shared caches.
+// securityHeaders applies hardening headers to every response. Cache-Control
+// is set to no-store for everything (including the SPA shell and static
+// assets) so a panel upgrade can never serve a stale index/app.js from a
+// browser or proxy cache while the backend has moved on.
 func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Cache-Control", "no-store")
 		h.Set("Content-Security-Policy",
 			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
 				"img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'")
-		if strings.HasPrefix(r.URL.Path, "/api/") {
-			h.Set("Cache-Control", "no-store")
-		}
 		next.ServeHTTP(w, r)
 	})
 }
