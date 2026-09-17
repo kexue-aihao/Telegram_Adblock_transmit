@@ -30,12 +30,12 @@
   --muted: #6b7483;
   --accent: #2f6fe0;
   --accent-soft: rgba(47, 111, 224, 0.1);
-  --ok: #1f9d4d;
-  --ok-soft: rgba(31, 157, 77, 0.1);
+  --ok: #188543;
+  --ok-soft: rgba(24, 133, 67, 0.1);
   --err: #d9383a;
   --err-soft: rgba(217, 56, 58, 0.1);
-  --warn: #b97a12;
-  --warn-soft: rgba(185, 122, 18, 0.12);
+  --warn: #a06b0c;
+  --warn-soft: rgba(160, 107, 12, 0.12);
   --shadow: 0 8px 24px rgba(23, 35, 60, 0.08);
 }
 
@@ -56,6 +56,13 @@ body {
 .icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; flex: none; }
 
 button { font: inherit; cursor: pointer; }
+
+/* Keyboard navigation must always be visible, independent of theme and
+   control type (buttons, links, nav items, switches…). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 input, select, textarea {
   font: inherit;
@@ -92,7 +99,7 @@ input:focus, select:focus, textarea:focus {
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 
 .icon-btn {
-  display: grid; place-items: center; width: 36px; height: 36px;
+  display: grid; place-items: center; width: 40px; height: 40px; min-width: 40px;
   border: 1px solid var(--border); border-radius: 10px;
   background: var(--surface2); color: var(--muted);
   transition: color 0.15s, border-color 0.15s;
@@ -114,7 +121,7 @@ input:focus, select:focus, textarea:focus {
 .nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .nav-item {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; border-radius: var(--radius-sm);
+  padding: 10px 12px; min-height: 44px; border-radius: var(--radius-sm);
   color: var(--muted); text-decoration: none; border: none;
   background: transparent; width: 100%; text-align: left;
   transition: background 0.15s, color 0.15s;
@@ -145,6 +152,7 @@ input:focus, select:focus, textarea:focus {
 /* ── Buttons ─────────────────────────────────────────────────── */
 .btn {
   display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+  min-height: 38px;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--surface2); color: var(--text);
   padding: 8px 14px; transition: filter 0.15s, background 0.15s, border-color 0.15s;
@@ -236,6 +244,10 @@ table.data tbody tr.clickable { cursor: pointer; }
 }
 .switch input:checked + .track { background: var(--ok); }
 .switch input:checked + .track::after { transform: translateX(16px); }
+.switch input:focus-visible + .track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 .form-grid { display: grid; gap: 14px; margin-top: 16px; }
 .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -292,8 +304,28 @@ table.data tbody tr.clickable { cursor: pointer; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
 .toast.err { border-color: var(--err); color: var(--err); }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @media (max-width: 720px) {
   .sidebar { width: 64px; }
+  .sidebar .nav-item { min-height: 48px; justify-content: center; }
   .sidebar .nav-item span { display: none; }
   .view { padding: 16px; }
+}
+
+@media (max-width: 520px) {
+  .view { padding: 12px; }
+  .toolbar { flex-direction: column; align-items: stretch; }
+  .toolbar .btn { justify-content: center; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .login-wrap { padding: 16px; }
+  .modal { max-height: 92vh; }
+  .pagination { flex-wrap: wrap; }
+  .row-actions { flex-wrap: wrap; }
 }

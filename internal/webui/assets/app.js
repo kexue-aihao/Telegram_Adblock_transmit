@@ -58,7 +58,7 @@ async function api(path, options = {}) {
 /* ── Toast ───────────────────────────────────────────────────── */
 
 function toast(message, kind = "") {
-  const node = el("div", { class: `toast ${kind}` }, message);
+  const node = el("div", { class: `toast ${kind}`, role: "status", "aria-live": "polite" }, message);
   document.body.append(node);
   requestAnimationFrame(() => node.classList.add("show"));
   setTimeout(() => { node.classList.remove("show"); setTimeout(() => node.remove(), 250); }, 2600);
@@ -85,7 +85,10 @@ function parseHash() {
 function navigate() {
   state.route = parseHash();
   document.querySelectorAll(".nav-item[data-route]").forEach((item) => {
-    item.classList.toggle("active", item.dataset.route === state.route);
+    const active = item.dataset.route === state.route;
+    item.classList.toggle("active", active);
+    if (active) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
   });
   renderView();
 }
@@ -697,19 +700,32 @@ async function savePassword() {
 function openModal(title, subtitle) {
   const existing = document.getElementById("modal-root");
   empty(existing);
-  const modal = el("div", { class: "modal" },
+  const previouslyFocused = document.activeElement;
+  const modal = el("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": title },
     el("h3", null, title),
     el("div", { class: "sub hint" }, subtitle || ""),
     el("div", { class: "modal-content" }),
     el("div", { class: "actions" }),
   );
-  const backdrop = el("div", { class: "modal-backdrop", onclick: (e) => { if (e.target === backdrop) backdrop.remove(); } }, modal);
+  const onKeydown = (e) => { if (e.key === "Escape") close(); };
+  const close = () => {
+    document.removeEventListener("keydown", onKeydown);
+    backdrop.remove();
+    if (previouslyFocused && typeof previouslyFocused.focus === "function") {
+      previouslyFocused.focus();
+    }
+  };
+  const backdrop = el("div", { class: "modal-backdrop", onclick: (e) => { if (e.target === backdrop) close(); } }, modal);
   existing.append(backdrop);
+  document.addEventListener("keydown", onKeydown);
+  // Move keyboard focus into the dialog so Tab cycles through its controls.
+  const firstControl = modal.querySelector("input, select, textarea, button");
+  if (firstControl) firstControl.focus();
   const content = modal.querySelector(".modal-content");
   const actions = modal.querySelector(".actions");
   return {
     content, actions,
-    close() { backdrop.remove(); },
+    close,
   };
 }
 
