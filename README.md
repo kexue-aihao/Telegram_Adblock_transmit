@@ -73,7 +73,7 @@ ghcr.io/kexue-aihao/telegram-adblock-transmit
 生产环境建议固定版本或不可变摘要，不要长期使用 `latest`：
 
 ~~~env
-BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.0.0
+BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.2.0
 # 或：
 # BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit@sha256:<digest>
 ~~~
@@ -84,14 +84,38 @@ BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.0.0
 
 以下菜单名称以常见 1Panel 版本为例。不同版本可能把“容器 -> 编排”显示为“容器 -> Compose”，功能相同。
 
-### 第一步：确认 Docker
+### 第一步：一键部署（推荐）
+
+在服务器终端或 1Panel「终端」中执行下面这一行命令，脚本会自动完成部署目录创建、Compose 与 `.env` 模板下载、环境变量引导、镜像拉取和容器启动：
+
+~~~bash
+bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/telegram-adblock-transmit/master/scripts/deploy.sh)
+~~~
+
+脚本会依次询问 `BOT_TOKEN`、数据库密码（直接回车自动生成随机密码）以及是否启用 Web 管理面板（需要面板时输入 `y`，再设置面板用户名和密码）。也可以全部用环境变量跳过交互，实现全自动部署：
+
+~~~bash
+cd /opt
+BOT_TOKEN=替换为BotFather生成的Token \
+POSTGRES_PASSWORD=替换为数据库密码 \
+WEBUI_ENABLE=1 \
+WEBUI_USERNAME=admin \
+WEBUI_PASSWORD=替换为面板密码 \
+bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/telegram-adblock-transmit/master/scripts/deploy.sh)
+~~~
+
+常用可选变量：`DEPLOY_DIR`（部署目录，默认 `/opt/telegram-adblock-transmit`）、`BOT_IMAGE`（镜像版本，默认 `latest`，生产建议固定版本）、`WEBUI_ADDR`（监听地址，默认 `0.0.0.0:8080`）。脚本幂等，重复执行安全；已有的 `.env` 配置不会被覆盖，只补齐缺失项。
+
+脚本启动完成后：如果启用了面板，剩下的唯一工作就是配置 1Panel 反向代理（见[第 6 节](#6-web-管理面板可选)第 6.2 小节）；如果没启用面板，Bot 已经可以直接使用。以下第二步至第六步是等效的手工流程，供自定义部署或排查问题时参考。
+
+### 第二步：确认 Docker
 
 1. 登录 1Panel。
 2. 打开“容器”，确认 Docker 服务状态为运行中。
 3. 如果未安装 Docker，先在 1Panel 的容器设置或安装向导中安装 Docker Engine 和 Docker Compose。
 4. 打开“主机 -> 防火墙”，只放行实际需要的端口。bot 容器不需要对外开放端口。
 
-### 第二步：创建项目目录和文件
+### 第三步：创建项目目录和文件
 
 在 1Panel 的“文件”中创建目录：
 
@@ -117,14 +141,14 @@ chmod 600 .env
 
 如果要部署指定版本，请把下载 URL 中的 `master` 换成对应的发布标签。
 
-### 第三步：填写环境变量
+### 第四步：填写环境变量
 
 在 1Panel 文件编辑器中打开 `/opt/telegram-adblock-transmit/.env`，至少填写：
 
 ~~~env
 BOT_TOKEN=替换为BotFather生成的Token
 POSTGRES_PASSWORD=生成一个足够长的随机密码
-BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.0.0
+BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.2.0
 LOG_LEVEL=INFO
 ~~~
 
@@ -145,7 +169,7 @@ TELEGRAM_ALLOW_INSECURE_HTTP=false
 TELEGRAM_HTTP_TIMEOUT=30s
 ~~~
 
-### 第四步：创建 1Panel Compose 编排
+### 第五步：创建 1Panel Compose 编排
 
 1. 打开“容器 -> 编排”（或“容器 -> Compose”）。
 2. 点击“创建编排”。
@@ -156,7 +180,7 @@ TELEGRAM_HTTP_TIMEOUT=30s
 
 `docker-compose.pull.yml` 会拉取 bot 镜像、创建 PostgreSQL、创建持久化卷，并等待 PostgreSQL 健康检查通过。生产部署使用这个文件；`docker-compose.yml` 是源码构建配置，不要把两者同时作为同一个编排启动。
 
-### 第五步：验证启动
+### 第六步：验证启动
 
 在 1Panel 的编排详情中确认：
 
@@ -376,7 +400,7 @@ curl -fsS http://127.0.0.1:8080/healthz   # 返回 ok
 
 1. 在 1Panel 中备份 `postgres_data` 卷，并保存 `.env` 的加密副本。
 2. 可选项：如果你计划使用 Web 面板，先在 `.env` 设置 `WEBUI_ADDR`、`WEBUI_USERNAME`、`WEBUI_PASSWORD`（面板默认关闭，不设置不影响升级；启用后缺凭据会导致启动校验失败）。
-3. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.1.0`。
+3. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.2.0`。
 4. 在编排详情中执行拉取镜像并重新创建/启动服务。
 5. 查看 PostgreSQL 健康状态和 bot 日志，确认 bot 没有反复重启。
 
@@ -492,6 +516,7 @@ GitHub Actions 会在 `master` 分支和 `v*.*.*` 标签上构建并发布多架
 - `docker-compose.pull.yml`：生产环境拉取 GHCR 镜像的配置。
 - `.env.example`：环境变量模板。
 - `scripts/deploy.ps1`：PowerShell 一键拉取和启动脚本，适合 Windows 管理机。
+- `scripts/deploy.sh`：Linux 服务器（含 1Panel 终端）一键部署脚本，自动完成目录/模板/环境变量引导并启动容器（见第 3 节第一步）。
 - `deploy/nginx.telegram-api.conf.example`：自建 Bot API Server 的 Nginx 反向代理模板。
 - `deploy/Caddyfile.example`：Bot API Server 的 Caddy 反向代理模板。
 - `deploy/nginx.panel.conf.example`：Web 管理面板的 Nginx 反向代理模板。
