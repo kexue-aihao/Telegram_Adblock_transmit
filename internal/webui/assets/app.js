@@ -619,16 +619,27 @@ async function renderSettings(view) {
     empty(view).append(
       el("h2", null, "设置"),
       el("p", { class: "page-desc" }, "修改面板登录凭据，保存后立即生效并持久化"),
-      renderSettingsAccount(account.username),
-      renderSettingsPassword(),
+      el("div", { class: "settings-grid" },
+        settingsCard("登录用户名", `当前用户名：${account.username}。修改后请使用新用户名重新登录。`,
+          renderSettingsAccount(account.username)),
+        settingsCard("登录密码", "修改成功后所有已登录会话都会退出，需重新登录。",
+          renderSettingsPassword()),
+      ),
     );
   } catch (err) { renderError(view, err); }
 }
 
+// settingsCard renders a full-width glass card header + body, laid out
+// side by side on desktop so the settings page fills the whole view.
+function settingsCard(title, description, body) {
+  return el("div", { class: "card settings-card" },
+    el("h3", null, title),
+    el("p", { class: "hint settings-desc" }, description),
+    body);
+}
+
 function renderSettingsAccount(username) {
-  return el("div", { class: "card", style: "max-width:480px" },
-    el("h3", null, "登录用户名"),
-    el("p", { class: "hint" }, `当前用户名：${username}。修改后请使用新用户名重新登录。`),
+  return el("div", null,
     el("div", { class: "field" },
       el("label", { for: "set-user" }, "新用户名（字母、数字、_ . -，1-64 字符）"),
       el("input", { id: "set-user", value: username, autocomplete: "username", required: true })),
@@ -639,9 +650,7 @@ function renderSettingsAccount(username) {
 }
 
 function renderSettingsPassword() {
-  return el("div", { class: "card", style: "max-width:480px" },
-    el("h3", null, "登录密码"),
-    el("p", { class: "hint" }, "修改成功后所有已登录会话都会退出，需重新登录。"),
+  return el("div", null,
     el("div", { class: "field" },
       el("label", { for: "set-pw-current" }, "当前密码"),
       el("input", { id: "set-pw-current", type: "password", autocomplete: "current-password", required: true })),
