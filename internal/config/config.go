@@ -30,6 +30,11 @@ type Config struct {
 	// WebUISessionSecret signs session cookies. Optional: when unset, a fresh
 	// random key is generated at startup, invalidating all sessions on restart.
 	WebUISessionSecret string
+
+	// AdFilterEnabled gates the shipped-in advertising "virus library" that
+	// deletes forwarded ads and @-mentioned external bots in every group. It
+	// defaults to true so protection is on out of the box.
+	AdFilterEnabled bool
 }
 
 // WebUIEnabled reports whether the panel HTTP server should be started.
@@ -46,6 +51,7 @@ func Load() (Config, error) {
 		WebUIUsername:       os.Getenv("WEBUI_USERNAME"),
 		WebUIPassword:       os.Getenv("WEBUI_PASSWORD"),
 		WebUISessionSecret:  os.Getenv("WEBUI_SESSION_SECRET"),
+		AdFilterEnabled:     parseAdFilterEnabled(),
 	}
 	if cfg.BotToken == "" {
 		return Config{}, fmt.Errorf("BOT_TOKEN must be set")
@@ -103,6 +109,21 @@ func validateWebUI(cfg Config) error {
 		return fmt.Errorf("WEBUI_USERNAME may only contain A-Z a-z 0-9 _ . - (1-64 characters)")
 	}
 	return nil
+}
+
+// parseAdFilterEnabled reads ADFILTER_ENABLED. It defaults to true; an
+// unparsable value also stays enabled so a config typo never silently
+// disables spam protection.
+func parseAdFilterEnabled() bool {
+	raw := strings.TrimSpace(os.Getenv("ADFILTER_ENABLED"))
+	if raw == "" {
+		return true
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return true
+	}
+	return value
 }
 
 func parseBoolEnv(name string) (bool, error) {

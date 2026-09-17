@@ -247,7 +247,8 @@ func FromMessage(message *tgbotapi.Message, threadID *int) (domain.ModerationMes
 		userID = &id
 		userIsBot = message.From.IsBot
 	}
-	return domain.ModerationMessage{
+	text, entities := activeTextAndEntities(message.Text, message.Caption, message.Entities, message.CaptionEntities)
+	msg := domain.ModerationMessage{
 		ChatID:          message.Chat.ID,
 		ChatTitle:       message.Chat.Title,
 		ChatType:        message.Chat.Type,
@@ -257,7 +258,12 @@ func FromMessage(message *tgbotapi.Message, threadID *int) (domain.ModerationMes
 		UserIsBot:       userIsBot,
 		Text:            message.Text,
 		Caption:         message.Caption,
-	}, true
+		Entities:        messageEntities(text, entities),
+	}
+	// The typed message keeps forward_from/forward_from_chat but not
+	// forward_origin; the raw polling path carries the richer origin.
+	msg.Forward = forwardInfoFrom(nil, message.ForwardFrom, message.ForwardFromChat)
+	return msg, true
 }
 
 // ConvertMessage is an alias for FromMessage.
@@ -273,12 +279,122 @@ type RawUpdate struct {
 }
 
 type RawMessage struct {
-	MessageID       int            `json:"message_id"`
-	MessageThreadID *int           `json:"message_thread_id,omitempty"`
-	From            *tgbotapi.User `json:"from,omitempty"`
-	Chat            *tgbotapi.Chat `json:"chat"`
-	Text            string         `json:"text,omitempty"`
-	Caption         string         `json:"caption,omitempty"`
+	MessageID       int                      `json:"message_id"`
+	MessageThreadID *int                     `json:"message_thread_id,omitempty"`
+	From            *tgbotapi.User           `json:"from,omitempty"`
+	Chat            *tgbotapi.Chat           `json:"chat"`
+	Text            string                   `json:"text,omitempty"`
+	Caption         string                   `json:"caption,omitempty"`
+	Entities        []tgbotapi.MessageEntity `json:"entities,omitempty"`
+	CaptionEntities []tgbotapi.MessageEntity `json:"caption_entities,omitempty"`
+	// forward_origin only exists in the raw payload: the upstream library
+	// version does not model it, so the typed path falls back to
+	// forward_from / forward_from_chat.
+	ForwardOrigin   *rawForwardOrigin `json:"forward_origin,omitempty"`
+	ForwardFrom     *tgbotapi.User    `json:"forward_from,omitempty"`
+	ForwardFromChat *tgbotapi.Chat    `json:"forward_from_chat,omitempty"`
+}
+
+// rawForwardOrigin mirrors Telegram's forward_origin object, whose type field
+// discriminates "user", "hidden_user", "channel" and "chat" origins.
+type rawForwardOrigin struct {
+	Type       string         `json:"type"`
+	Date       int64          `json:"date"`
+	SenderUser *tgbotapi.User `json:"sender_user,omitempty"`
+	SenderName string         `json:"sender_user_name,omitempty"`
+	SenderChat *tgbotapi.Chat `json:"sender_chat,omitempty"`
+	Chat       *tgbotapi.Chat `json:"chat,omitempty"`
+	MessageID  int            `json:"message_id,omitempty"`
+}
+
+// activeTextAndEntities picks the text the format entities describe: Telegram
+// attaches entities to the message text and caption_entities to the caption.
+func activeTextAndEntities(text, caption string, entities, captionEntities []tgbotapi.MessageEntity) (string, []tgbotapi.MessageEntity) {
+	if text != "" {
+		return text, entities
+	}
+	return caption, captionEntities
+}
+
+// messageEntities reduces library entities to the domain subset the built-in
+// ad filter needs. Mention usernames are resolved from the message text via
+// their UTF-16 offsets; bot usernames are ASCII so the alignment holds, and
+// text_mention entities carry the full user (including the bot flag).
+func messageEntities(text string, entities []tgbotapi.MessageEntity) []domain.MessageEntityInfo {
+	if len(entities) == 0 {
+		return nil
+	}
+	out := make([]domain.MessageEntityInfo, 0, len(entities))
+	for _, e := range entities {
+		info := domain.MessageEntityInfo{Type: e.Type}
+		switch e.Type {
+		case "mention":
+			info.Username = strings.TrimPrefix(utf16Slice(text, e.Offset, e.Length), "@")
+		case "text_mention":
+			if e.User != nil {
+				info.Username = e.User.UserName
+				info.IsBot = e.User.IsBot
+			}
+		case "url", "text_link":
+			info.HasURL = true
+		}
+		out = append(out, info)
+	}
+	return out
+}
+
+// utf16Slice decodes the UTF-16 code-unit range [offset, offset+length) that
+// Telegram uses for entity offsets into a Go substring.
+func utf16Slice(value string, offset, length int) string {
+	runes := []rune(value)
+	start := utf16OffsetToRune(runes, offset)
+	end := utf16OffsetToRune(runes, offset+length)
+	if start > len(runes) {
+		return ""
+	}
+	if end > len(runes) {
+		end = len(runes)
+	}
+	return string(runes[start:end])
+}
+
+func utf16OffsetToRune(runes []rune, target int) int {
+	units := 0
+	for i, r := range runes {
+		if units >= target {
+			return i
+		}
+		if r > 0xFFFF {
+			units += 2
+		} else {
+			units++
+		}
+	}
+	return len(runes)
+}
+
+// forwardInfoFrom prefers Telegram's forward_origin (raw path) and falls back
+// to the legacy forward_from/forward_from_chat fields.
+func forwardInfoFrom(origin *rawForwardOrigin, from *tgbotapi.User, fromChat *tgbotapi.Chat) *domain.ForwardInfo {
+	if origin != nil {
+		info := &domain.ForwardInfo{Type: origin.Type}
+		switch {
+		case origin.Chat != nil:
+			info.SourceID, info.SourceTitle = origin.Chat.ID, origin.Chat.Title
+		case origin.SenderChat != nil:
+			info.SourceID, info.SourceTitle = origin.SenderChat.ID, origin.SenderChat.Title
+		case origin.SenderUser != nil:
+			info.SourceID, info.SourceTitle = origin.SenderUser.ID, origin.SenderUser.FirstName+" "+origin.SenderUser.LastName
+		}
+		return info
+	}
+	if fromChat != nil {
+		return &domain.ForwardInfo{Type: fromChat.Type, SourceID: fromChat.ID, SourceTitle: fromChat.Title}
+	}
+	if from != nil {
+		return &domain.ForwardInfo{Type: "user", SourceID: from.ID, SourceTitle: strings.TrimSpace(from.FirstName + " " + from.LastName)}
+	}
+	return nil
 }
 
 // ParseUpdate converts raw Telegram JSON while retaining message_thread_id.
@@ -302,9 +418,13 @@ func ParseUpdate(data []byte) (domain.ModerationMessage, bool, error) {
 		userID = &id
 		userIsBot = message.From.IsBot
 	}
-	return domain.ModerationMessage{
+	text, entities := activeTextAndEntities(message.Text, message.Caption, message.Entities, message.CaptionEntities)
+	msg := domain.ModerationMessage{
 		ChatID: message.Chat.ID, ChatTitle: message.Chat.Title, ChatType: message.Chat.Type,
 		MessageID: message.MessageID, MessageThreadID: message.MessageThreadID,
 		UserID: userID, UserIsBot: userIsBot, Text: message.Text, Caption: message.Caption,
-	}, true, nil
+		Entities: messageEntities(text, entities),
+	}
+	msg.Forward = forwardInfoFrom(message.ForwardOrigin, message.ForwardFrom, message.ForwardFromChat)
+	return msg, true, nil
 }

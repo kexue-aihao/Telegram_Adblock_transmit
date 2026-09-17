@@ -14,6 +14,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/builtin"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/ports"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/rules"
@@ -42,6 +43,7 @@ type Service struct {
 	telegram    ports.TelegramClient
 	logger      *slog.Logger
 	botUsername string
+	builtin     *builtin.Checker
 }
 
 // NewService builds a moderation service. A nil logger falls back to the
@@ -60,6 +62,14 @@ func (s *Service) SetBotUsername(username string) {
 		return
 	}
 	s.botUsername = strings.TrimPrefix(strings.TrimSpace(username), "@")
+}
+
+// SetBuiltinFilter attaches the shipped-in advertising filter. A nil checker
+// (or a disabled one) leaves the service with per-group rules only.
+func (s *Service) SetBuiltinFilter(filter *builtin.Checker) {
+	if s != nil {
+		s.builtin = filter
+	}
 }
 
 // NewProcessor is retained as a descriptive alias for callers migrating from
@@ -206,6 +216,21 @@ func (s *Service) process(ctx context.Context, message domain.ModerationMessage,
 			return false, nil
 		}
 	}
+	// The built-in ad filter strikes first: forwarded ads and @-mentioned
+	// external bots are deleted the moment they appear, without waiting for an
+	// administrator to define a rule. No admin exemption, matching the per-group
+	// rules below.
+	if s.builtin != nil {
+		if hits := s.builtin.Detect(message); len(hits) > 0 {
+			s.logger.Info("built-in ad filter hit", "chat_id", message.ChatID, "message_id", message.MessageID, "hits", hits)
+			return s.enforce(ctx, message, domain.NewAuditEntry{
+				ChatID: message.ChatID, ChatTitle: message.ChatTitle, MessageThreadID: message.MessageThreadID,
+				UserID: message.UserID, MessageID: message.MessageID, BuiltinHits: hits,
+				Content: content,
+			})
+		}
+	}
+
 	if s.cache == nil {
 		return false, errors.New("moderation rule cache is nil")
 	}
@@ -213,7 +238,17 @@ func (s *Service) process(ctx context.Context, message domain.ModerationMessage,
 	if len(matched) == 0 {
 		return false, nil
 	}
+	return s.enforce(ctx, message, domain.NewAuditEntry{
+		ChatID: message.ChatID, ChatTitle: message.ChatTitle, MessageThreadID: message.MessageThreadID,
+		UserID: message.UserID, MessageID: message.MessageID, MatchedRuleIDs: append([]int64(nil), matched...),
+		Content: content,
+	})
+}
 
+// enforce performs the shared delete + audit + notice sequence used by both
+// the per-group rules and the built-in filter. The returned bool is true only
+// when the message was successfully deleted.
+func (s *Service) enforce(ctx context.Context, message domain.ModerationMessage, entry domain.NewAuditEntry) (bool, error) {
 	deleteSucceeded := false
 	var deletionErr error
 	if s.telegram == nil {
@@ -222,14 +257,10 @@ func (s *Service) process(ctx context.Context, message domain.ModerationMessage,
 		deletionErr = s.telegram.DeleteMessage(ctx, message.ChatID, message.MessageID)
 		deleteSucceeded = deletionErr == nil
 	}
-	entry := domain.NewAuditEntry{
-		ChatID: message.ChatID, ChatTitle: message.ChatTitle, MessageThreadID: message.MessageThreadID,
-		UserID: message.UserID, MessageID: message.MessageID, MatchedRuleIDs: append([]int64(nil), matched...),
-		Content: content, DeleteSucceeded: deleteSucceeded,
-	}
+	entry.DeleteSucceeded = deleteSucceeded
 	if deletionErr != nil {
 		entry.DeletionError = truncateString(deletionErr.Error(), 1000)
-		s.logger.Warn("unable to delete matched message", "chat_id", message.ChatID, "message_id", message.MessageID, "matched_rule_ids", matched, "error", deletionErr)
+		s.logger.Warn("unable to delete matched message", "chat_id", message.ChatID, "message_id", message.MessageID, "matched_rule_ids", entry.MatchedRuleIDs, "builtin_hits", entry.BuiltinHits, "error", deletionErr)
 	}
 	var auditErr error
 	if s.audit != nil {

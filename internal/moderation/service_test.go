@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/builtin"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
 )
 
@@ -265,6 +266,53 @@ func TestStartDirectedAtOtherBotIsIgnored(t *testing.T) {
 	}
 	if len(tg.sends) != 0 {
 		t.Fatal("start for another bot produced a reply")
+	}
+}
+
+func TestBuiltinFilterDeletesAndAuditsOnSight(t *testing.T) {
+	tg := &fakeTelegram{admin: true}
+	audit := &fakeAudit{}
+	cache := &fakeCache{}
+	svc := NewService(&fakeRules{}, cache, audit, tg, nil)
+	svc.SetBuiltinFilter(builtin.New(true))
+
+	message := testMessage()
+	message.Text = "进群 https://t.me/+abc"
+	if deleted, err := svc.HandleUpdate(context.Background(), message); err != nil || !deleted {
+		t.Fatalf("builtin filter did not delete: %v, %v", deleted, err)
+	}
+	if len(audit.entries) != 1 || len(audit.entries[0].BuiltinHits) == 0 {
+		t.Fatalf("builtin hits not audited: %+v", audit.entries)
+	}
+	entry := audit.entries[0]
+	if !entry.DeleteSucceeded || entry.MatchedRuleIDs != nil {
+		t.Fatalf("unexpected audit entry: %+v", entry)
+	}
+	// The built-in filter fires before the per-group rule cache is consulted.
+	if len(cache.queries) != 0 {
+		t.Fatalf("rule cache consulted for a builtin hit: %v", cache.queries)
+	}
+	if len(tg.sends) != 1 || tg.sends[0].text != ModerationNotice {
+		t.Fatalf("expected moderation notice, got %+v", tg.sends)
+	}
+}
+
+func TestBuiltinFilterSkipWhenDisabled(t *testing.T) {
+	tg := &fakeTelegram{admin: false}
+	audit := &fakeAudit{}
+	cache := &fakeCache{}
+	svc := NewService(&fakeRules{}, cache, audit, tg, nil)
+	svc.SetBuiltinFilter(builtin.New(false))
+
+	// With the filter off, the same invite text is judged by the rule cache
+	// (which does not match) and must be left untouched.
+	message := testMessage()
+	message.Text = "进群 https://t.me/+abc"
+	if deleted, err := svc.HandleUpdate(context.Background(), message); err != nil || deleted {
+		t.Fatalf("disabled builtin filter changed behavior: %v, %v", deleted, err)
+	}
+	if len(cache.queries) != 1 || len(audit.entries) != 0 {
+		t.Fatalf("disabled filter touched the moderation path: cache=%v audit=%v", cache.queries, audit.entries)
 	}
 }
 

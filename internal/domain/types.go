@@ -40,6 +40,7 @@ type AuditEntry struct {
 	UserID          *int64
 	MessageID       int
 	MatchedRuleIDs  []int64
+	BuiltinHits     []string
 	ContentSHA256   string
 	ContentSummary  string
 	DeleteSucceeded bool
@@ -54,9 +55,29 @@ type NewAuditEntry struct {
 	UserID          *int64
 	MessageID       int
 	MatchedRuleIDs  []int64
+	BuiltinHits     []string
 	Content         string
 	DeleteSucceeded bool
 	DeletionError   string
+}
+
+// MessageEntityInfo is the subset of Telegram message entity data the built-in
+// ad filter needs. Text offsets are resolved to the actual @username, and
+// text_mention entities carry the mentioned user's bot flag.
+type MessageEntityInfo struct {
+	Type     string // "mention", "text_mention", "url", "text_link", …
+	Username string // mentioned @username (without the leading @), if any
+	IsBot    bool   // only known for text_mention entities
+	HasURL   bool   // entity points at a link (url / text_link)
+}
+
+// ForwardInfo describes where a forwarded message originated, used to detect
+// forwarded advertisements. Type mirrors Telegram's forward_origin type:
+// "user", "hidden_user", "channel", "chat", or "" when unknown.
+type ForwardInfo struct {
+	Type        string
+	SourceID    int64
+	SourceTitle string
 }
 
 type ModerationMessage struct {
@@ -69,6 +90,8 @@ type ModerationMessage struct {
 	UserIsBot       bool
 	Text            string
 	Caption         string
+	Entities        []MessageEntityInfo
+	Forward         *ForwardInfo
 }
 
 func (m ModerationMessage) Content() string {

@@ -15,6 +15,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/builtin"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/config"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/moderation"
@@ -65,6 +66,7 @@ func run() error {
 	telegramClient := telegram.NewClientWithAPIEndpoint(botAPI, cfg.TelegramAPIEndpoint)
 	service := moderation.NewService(ruleStore, cache, auditStore, telegramClient, logger)
 	service.SetBotUsername(botAPI.Self.UserName)
+	service.SetBuiltinFilter(builtin.New(cfg.AdFilterEnabled))
 	if err := service.LoadCache(ctx); err != nil {
 		return fmt.Errorf("load moderation rules: %w", err)
 	}

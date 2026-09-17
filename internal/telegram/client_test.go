@@ -125,6 +125,65 @@ func TestFromMessageFiltersUnsupportedChatsAndCopiesFields(t *testing.T) {
 	}
 }
 
+func TestFromMessageCapturesEntitiesAndForward(t *testing.T) {
+	message := &tgbotapi.Message{
+		MessageID: 9,
+		From:      &tgbotapi.User{ID: 42, IsBot: false},
+		Chat:      &tgbotapi.Chat{ID: -100, Type: "supergroup", Title: "Forum"},
+		Text:      "加 @somespambot https://t.me/xyz",
+		Entities: []tgbotapi.MessageEntity{
+			{Type: "mention", Offset: 2, Length: 12},
+			{Type: "url", Offset: 15, Length: 19},
+		},
+		ForwardFromChat: &tgbotapi.Chat{ID: -100999, Type: "channel", Title: "广告频道"},
+	}
+	converted, ok := FromMessage(message, nil)
+	if !ok {
+		t.Fatal("FromMessage failed")
+	}
+	if len(converted.Entities) != 2 || converted.Entities[0].Username != "somespambot" || !converted.Entities[1].HasURL {
+		t.Fatalf("unexpected entities: %+v", converted.Entities)
+	}
+	// text_mention carries the bot flag.
+	mention := &tgbotapi.Message{
+		MessageID: 1, From: &tgbotapi.User{ID: 1}, Chat: &tgbotapi.Chat{ID: -100, Type: "group"},
+		Text:     "hi",
+		Entities: []tgbotapi.MessageEntity{{Type: "text_mention", Offset: 0, Length: 2, User: &tgbotapi.User{ID: 5, IsBot: true, UserName: "spamshop"}}},
+	}
+	converted2, ok := FromMessage(mention, nil)
+	if !ok || len(converted2.Entities) != 1 ||
+		converted2.Entities[0].IsBot != true || converted2.Entities[0].Username != "spamshop" {
+		t.Fatalf("text_mention not captured: %+v, %v", converted2.Entities, ok)
+	}
+	if converted.Forward == nil || converted.Forward.Type != "channel" ||
+		converted.Forward.SourceID != -100999 || converted.Forward.SourceTitle != "广告频道" {
+		t.Fatalf("forward_from_chat not captured: %+v", converted.Forward)
+	}
+}
+
+func TestParseUpdateCapturesForwardOrigin(t *testing.T) {
+	payload := []byte(`{"message":{
+		"message_id": 3,
+		"from": {"id": 7, "is_bot": false},
+		"chat": {"id": -100, "type": "supergroup", "title": "T"},
+		"text": "加 @helpspam t.me/xyz",
+		"entities": [{"type": "mention", "offset": 2, "length": 9}],
+		"forward_origin": {"type": "channel", "date": 1700000000,
+			"chat": {"id": -10091, "type": "channel", "title": "广告频道"}, "message_id": 7}
+	}}`)
+	message, ok, err := ParseUpdate(payload)
+	if err != nil || !ok {
+		t.Fatalf("ParseUpdate = %v, %v, %v", message, ok, err)
+	}
+	if len(message.Entities) != 1 || message.Entities[0].Username != "helpspam" {
+		t.Fatalf("mention not resolved from raw entities: %+v", message.Entities)
+	}
+	if message.Forward == nil || message.Forward.Type != "channel" ||
+		message.Forward.SourceID != -10091 || message.Forward.SourceTitle != "广告频道" {
+		t.Fatalf("forward_origin not captured: %+v", message.Forward)
+	}
+}
+
 func TestParseUpdateRetainsTopicAndEditedMessage(t *testing.T) {
 	threadID := 88
 	payload, err := json.Marshal(map[string]any{

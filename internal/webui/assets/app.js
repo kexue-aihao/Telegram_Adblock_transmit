@@ -577,12 +577,13 @@ function renderAuditTable(wrap, data) {
     const badge = item.delete_succeeded
       ? el("span", { class: "badge ok" }, "已删除")
       : el("span", { class: "badge err", title: item.deletion_error || "" }, "删除失败");
+    const builtinTags = (item.builtin_hits || []).map((hit) => el("span", { class: "badge ok mono", style: "margin-right:4px" }, `⚡${hit}`));
     const ruleTags = (item.matched_rule_ids || []).map((id) => el("span", { class: "badge muted mono", style: "margin-right:4px" }, `#${id}`));
     tbody.append(el("tr", { class: "clickable", onclick: () => openAuditDetail(item.id) },
       el("td", { class: "mono" }, item.occurred_at.slice(0, 19).replace("T", " ")),
       el("td", null, txt(item.chat_id)),
       el("td", { class: "pattern-cell", title: item.content_summary }, item.content_summary || "（无摘要）"),
-      el("td", null, ruleTags),
+      el("td", null, builtinTags, ruleTags),
       el("td", null, badge)));
   }
 
@@ -603,6 +604,10 @@ async function openAuditDetail(id) {
     el("dt", null, "用户 ID"), el("dd", { class: "mono" }, entry.user_id ?? "—"),
     el("dt", null, "消息 ID"), el("dd", { class: "mono" }, entry.message_id),
     el("dt", null, "命中规则"), el("dd", null, (entry.matched_rule_ids || []).map((r) => txt(`#${r} `))),
+    el("dt", null, "内置命中"), el("dd", null,
+      (entry.builtin_hits && entry.builtin_hits.length)
+        ? entry.builtin_hits.map((b) => el("span", { class: "badge ok mono", style: "margin-right:4px" }, `⚡${b}`))
+        : txt("—")),
     el("dt", null, "内容摘要"), el("dd", null, entry.content_summary || "（无）"),
     el("dt", null, "删除结果"), el("dd", null,
       entry.delete_succeeded ? el("span", { class: "badge ok" }, "成功") : el("span", { class: "badge err" }, "失败")),

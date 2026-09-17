@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -220,4 +221,48 @@ func TestPanelRepositoryIntegration(t *testing.T) {
 		ListChats(context.Context) ([]domain.ChatSummary, error)
 		UpdatePattern(context.Context, int64, int64, string) (domain.Rule, error)
 	} = ruleRepo
+}
+
+func TestPanelAuditBuiltinHitsIntegration(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set TEST_DATABASE_URL to run PostgreSQL repository integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	const chatID int64 = -9223372036854770002
+	cleanup := func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM chat_groups WHERE chat_id = $1`, chatID)
+	}
+	cleanup()
+	defer cleanup()
+
+	auditRepo := NewAuditRepository(pool)
+	entry := domain.NewAuditEntry{
+		ChatID: chatID, ChatTitle: "内置测试", MessageID: 7,
+		Content: "进群 https://t.me/+abc", BuiltinHits: []string{"ad_invite_link", "ad_bot_mention"},
+		DeleteSucceeded: true,
+	}
+	if err := auditRepo.Record(ctx, entry); err != nil {
+		t.Fatalf("Record with builtin hits: %v", err)
+	}
+	recent, err := auditRepo.ListRecent(ctx, chatID, 5)
+	if err != nil {
+		t.Fatalf("ListRecent: %v", err)
+	}
+	if len(recent) != 1 {
+		t.Fatalf("ListRecent len = %d, want 1", len(recent))
+	}
+	if !slices.Equal(recent[0].BuiltinHits, entry.BuiltinHits) {
+		t.Fatalf("BuiltinHits = %v, want %v", recent[0].BuiltinHits, entry.BuiltinHits)
+	}
 }

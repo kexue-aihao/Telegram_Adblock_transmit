@@ -165,3 +165,18 @@ func TestLoadRejectsInvalidTelegramEndpoint(t *testing.T) {
 		})
 	}
 }
+
+func TestParseAdFilterEnabledDefaultsToOn(t *testing.T) {
+	t.Setenv("ADFILTER_ENABLED", "")
+	if !parseAdFilterEnabled() {
+		t.Fatal("unset ADFILTER_ENABLED should default to enabled")
+	}
+	t.Setenv("ADFILTER_ENABLED", "false")
+	if parseAdFilterEnabled() {
+		t.Fatal("ADFILTER_ENABLED=false should disable")
+	}
+	t.Setenv("ADFILTER_ENABLED", "maybe")
+	if !parseAdFilterEnabled() {
+		t.Fatal("a typo must never silently disable the ad filter")
+	}
+}
