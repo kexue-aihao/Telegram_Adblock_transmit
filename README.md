@@ -352,8 +352,13 @@ WEBUI_PASSWORD=replace-with-a-long-random-password
 生产环境建议用 1Panel 反向代理以 HTTPS 访问面板，不要直接暴露 8080：
 
 1. 在 DNS 中将 `panel.example.com` 的 A/AAAA 记录指向服务器（面板域名需与 Bot API 域名不同）。
-2. 在 1Panel 打开“网站 -> 创建网站”，选择“反向代理”，上游填写 `http://127.0.0.1:8080`（1Panel 默认以 host 网络模式的 OpenResty 反代，直接访问宿主机回环地址即可）。如果反代容器运行在 Docker 网络中，改为 `http://bot:8080` 并删除 compose 中的 ports 发布。填写后申请并启用 SSL。
+2. 在 1Panel 打开“网站 -> 创建网站”，选择“反向代理”，上游地址填写 `http://127.0.0.1:8080`。填写后申请并启用 SSL。
 3. 面板站点可以保留 access log，便于观察登录暴力尝试；面板请求 URI 中不含 Bot Token。
+
+> **为什么是 `127.0.0.1` 而不是 `bot`**：1Panel 的 OpenResty 反代应用以 `network_mode: host` 运行（见 1Panel 应用商店 openresty 的 `docker-compose.yml`），nginx 共享宿主机网络栈：
+> - host 网络下**无法解析 Docker 服务名**，上游填 `http://bot:8080` 会得到 `host not found in upstream`，导致面板 502；
+> - compose 已默认把 bot 的 8080 发布到宿主机回环地址（`127.0.0.1:8080:8080`，仅本机可达），因此上游指向宿主机自己的 `http://127.0.0.1:8080` 即可。
+> 如果不使用本机回环发布，等效替代：改用 `0.0.0.0:8080:8080` 发布并放行防火墙，上游填 `http://<服务器局域网IP>:8080`；或直接填 bot 容器在桥接网络的容器 IP（`docker inspect <容器ID> --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'`，注意容器重建后 IP 会变化）。
 
 仓库中的代理模板可直接参考：
 
