@@ -203,6 +203,6 @@ fi
 say ""
 say "首次使用: 将 Bot 加入群组并设为管理员，在群内执行 /rule_add <正则>、/rule_list 等命令（详见 README 第 4 节）。"
 if grep -q '^BOT_IMAGE=.*latest' "$DEPLOY_DIR/.env" 2>/dev/null; then
-  say "提示: .env 中 BOT_IMAGE 当前为 latest，生产建议固定为具体版本（如 v1.2.0）以便回滚。"
+  say "提示: .env 中 BOT_IMAGE 当前为 latest，生产建议固定为具体版本（如 v1.3.0）以便回滚。"
 fi
 say "部署目录: $DEPLOY_DIR（.env 为 600 权限，包含机密，请勿外传）"

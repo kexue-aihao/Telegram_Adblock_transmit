@@ -73,7 +73,7 @@ ghcr.io/kexue-aihao/telegram-adblock-transmit
 生产环境建议固定版本或不可变摘要，不要长期使用 `latest`：
 
 ~~~env
-BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.2.0
+BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.3.0
 # 或：
 # BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit@sha256:<digest>
 ~~~
@@ -148,7 +148,7 @@ chmod 600 .env
 ~~~env
 BOT_TOKEN=替换为BotFather生成的Token
 POSTGRES_PASSWORD=生成一个足够长的随机密码
-BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.2.0
+BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.3.0
 LOG_LEVEL=INFO
 ~~~
 
@@ -406,7 +406,7 @@ curl -fsS http://127.0.0.1:8080/healthz   # 返回 ok
 
 1. 在 1Panel 中备份 `postgres_data` 卷，并保存 `.env` 的加密副本。
 2. 可选项：如果你计划使用 Web 面板，先在 `.env` 设置 `WEBUI_ADDR`、`WEBUI_USERNAME`、`WEBUI_PASSWORD`（面板默认关闭，不设置不影响升级；启用后缺凭据会导致启动校验失败）。
-3. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.2.0`。
+3. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.3.0`。
 4. 在编排详情中执行拉取镜像并重新创建/启动服务。
 5. 查看 PostgreSQL 健康状态和 bot 日志，确认 bot 没有反复重启。
 
