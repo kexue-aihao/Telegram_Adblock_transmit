@@ -102,8 +102,17 @@ func TestPanelRepositoryIntegration(t *testing.T) {
 	if found == nil {
 		t.Fatal("ListChats did not return the seeded chat")
 	}
-	if found.RuleCount != 2 || found.EnabledCount != 2 || found.Title != "面板集成" {
+	// Rules are global: per-chat counts are no longer reported.
+	if found.RuleCount != 0 || found.EnabledCount != 0 || found.Title != "面板集成" {
 		t.Fatalf("ListChats summary = %+v", found)
+	}
+	// The global sentinel chat owns the rules; any chat id sees the same set.
+	global, err := ruleRepo.List(ctx, 12345)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(global) != 2 {
+		t.Fatalf("global rule list len = %d, want 2", len(global))
 	}
 
 	// Seed audit history spread over two distinct days for stats assertions.
@@ -185,6 +194,21 @@ func TestPanelRepositoryIntegration(t *testing.T) {
 	}
 	if days[0].Hits != 0 {
 		t.Fatalf("StatsByDay zero-fill failed: %+v", days[0])
+	}
+
+	// CountHits: the two seeded audits for the same user are within the window.
+	hits, err := auditRepo.CountHits(ctx, chatID, userID, now.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("CountHits: %v", err)
+	}
+	if hits != 2 {
+		t.Fatalf("CountHits = %d, want 2", hits)
+	}
+	if hits, err = auditRepo.CountHits(ctx, chatID, userID+1, now.Add(-time.Hour)); err != nil {
+		t.Fatalf("CountHits (other user): %v", err)
+	}
+	if hits != 0 {
+		t.Fatalf("CountHits for another user = %d, want 0", hits)
 	}
 
 	// Panel settings round-trip: absent row returns a sentinel, saves upsert

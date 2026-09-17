@@ -20,36 +20,43 @@ import (
 
 /* ── Fakes ────────────────────────────────────────────────────── */
 
+// fakeRuleStore mirrors the production store's global semantics: rules are a
+// single shared set and the chat_id parameters are ignored.
 type fakeRuleStore struct {
-	byChat   map[int64][]domain.Rule
+	rules    []domain.Rule
 	nextID   int64
 	removeOK bool
 }
 
 func newFakeRuleStore() *fakeRuleStore {
-	return &fakeRuleStore{byChat: make(map[int64][]domain.Rule), nextID: 1}
+	return &fakeRuleStore{nextID: 1}
 }
 
 func (f *fakeRuleStore) LoadEnabled(context.Context) (map[int64][]domain.Rule, error) {
-	return nil, nil
+	out := make(map[int64][]domain.Rule)
+	for _, rule := range f.rules {
+		if rule.Enabled {
+			out[-1] = append(out[-1], rule)
+		}
+	}
+	return out, nil
 }
 func (f *fakeRuleStore) Add(_ context.Context, input domain.NewRule) (domain.Rule, error) {
 	if _, err := rules.ValidatePattern(input.Pattern); err != nil {
 		return domain.Rule{}, err
 	}
-	rule := domain.Rule{ID: f.nextID, ChatID: input.ChatID, Pattern: input.Pattern, Enabled: true, CreatedBy: input.CreatedBy, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	rule := domain.Rule{ID: f.nextID, ChatID: -1, Pattern: input.Pattern, Enabled: true, CreatedBy: input.CreatedBy, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	f.nextID++
-	f.byChat[input.ChatID] = append(f.byChat[input.ChatID], rule)
+	f.rules = append(f.rules, rule)
 	return rule, nil
 }
-func (f *fakeRuleStore) List(_ context.Context, chatID int64) ([]domain.Rule, error) {
-	return append([]domain.Rule(nil), f.byChat[chatID]...), nil
+func (f *fakeRuleStore) List(_ context.Context, _ int64) ([]domain.Rule, error) {
+	return append([]domain.Rule(nil), f.rules...), nil
 }
-func (f *fakeRuleStore) Remove(_ context.Context, chatID, ruleID int64) error {
-	rules := f.byChat[chatID]
-	for i, rule := range rules {
+func (f *fakeRuleStore) Remove(_ context.Context, _ int64, ruleID int64) error {
+	for i, rule := range f.rules {
 		if rule.ID == ruleID {
-			f.byChat[chatID] = append(rules[:i], rules[i+1:]...)
+			f.rules = append(f.rules[:i], f.rules[i+1:]...)
 			return nil
 		}
 	}
@@ -58,35 +65,34 @@ func (f *fakeRuleStore) Remove(_ context.Context, chatID, ruleID int64) error {
 	}
 	return nil
 }
-func (f *fakeRuleStore) SetEnabled(_ context.Context, chatID, ruleID int64, enabled bool) error {
-	rules := f.byChat[chatID]
-	for i := range rules {
-		if rules[i].ID == ruleID {
-			rules[i].Enabled = enabled
-			rules[i].UpdatedAt = time.Now()
+func (f *fakeRuleStore) SetEnabled(_ context.Context, _ int64, ruleID int64, enabled bool) error {
+	for i := range f.rules {
+		if f.rules[i].ID == ruleID {
+			f.rules[i].Enabled = enabled
+			f.rules[i].UpdatedAt = time.Now()
 			return nil
 		}
 	}
 	return store.ErrRuleNotFound
 }
-func (f *fakeRuleStore) UpdatePattern(_ context.Context, chatID, ruleID int64, pattern string) (domain.Rule, error) {
+func (f *fakeRuleStore) UpdatePattern(_ context.Context, _ int64, ruleID int64, pattern string) (domain.Rule, error) {
 	if _, err := rules.ValidatePattern(pattern); err != nil {
 		return domain.Rule{}, err
 	}
-	for i := range f.byChat[chatID] {
-		if f.byChat[chatID][i].ID == ruleID {
-			f.byChat[chatID][i].Pattern = pattern
-			f.byChat[chatID][i].UpdatedAt = time.Now()
-			return f.byChat[chatID][i], nil
+	for i := range f.rules {
+		if f.rules[i].ID == ruleID {
+			f.rules[i].Pattern = pattern
+			f.rules[i].UpdatedAt = time.Now()
+			return f.rules[i], nil
 		}
 	}
 	return domain.Rule{}, store.ErrRuleNotFound
 }
 
-func (f *fakeRuleStore) exceedQuota(chatID int64) {
+func (f *fakeRuleStore) exceedQuota(_ int64) {
 	// Pad an existing rule so the total-pattern quota would be exceeded.
-	for i := range f.byChat[chatID] {
-		f.byChat[chatID][i].Pattern = strings.Repeat("x", domain.MaxPatternLength)
+	for i := range f.rules {
+		f.rules[i].Pattern = strings.Repeat("x", domain.MaxPatternLength)
 	}
 }
 
@@ -349,26 +355,25 @@ func hasCookie(cookies []*http.Cookie, name string, maxAge int) bool {
 
 func TestMutationsRequireCSRFHeader(t *testing.T) {
 	_, _, _, _, _, handler := newTestPanel(t, nil)
-	rec := authedRequest(t, handler, http.MethodDelete, "/api/chats/100/rules/1", "", false)
+	rec := authedRequest(t, handler, http.MethodDelete, "/api/rules/1", "", false)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("mutation without CSRF header = %d, want 403", rec.Code)
 	}
 }
 
-/* ── Rules API ────────────────────────────────────────────────── */
+/* ── Rules API (global) ───────────────────────────────────────── */
 
 func TestRulesCRUD(t *testing.T) {
-	s, ruleStore, _, refresher, _, handler := newTestPanel(t, nil)
-	_ = s
+	_, ruleStore, _, refresher, _, handler := newTestPanel(t, nil)
 
-	// List empty chat.
-	rec := authedRequest(t, handler, http.MethodGet, "/api/chats/100/rules", "", true)
+	// List the (empty) global set.
+	rec := authedRequest(t, handler, http.MethodGet, "/api/rules", "", true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list status = %d", rec.Code)
 	}
 
 	// Add.
-	rec = authedRequest(t, handler, http.MethodPost, "/api/chats/100/rules", `{"pattern":"免费.*领取"}`, true)
+	rec = authedRequest(t, handler, http.MethodPost, "/api/rules", `{"pattern":"免费.*领取"}`, true)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("add status = %d, body = %s", rec.Code, rec.Body.String())
 	}
@@ -382,47 +387,73 @@ func TestRulesCRUD(t *testing.T) {
 	if created.CreatedBy != createdByPanel {
 		t.Fatalf("created_by = %d, want %d", created.CreatedBy, createdByPanel)
 	}
-	if len(refresher.refreshed) != 1 || refresher.refreshed[0] != 100 {
+	if len(refresher.refreshed) != 1 || refresher.refreshed[0] != 0 {
 		t.Fatalf("cache refresh calls = %v", refresher.refreshed)
 	}
 
 	// Invalid pattern → 400.
-	rec = authedRequest(t, handler, http.MethodPost, "/api/chats/100/rules", `{"pattern":"(?!x)"}`, true)
+	rec = authedRequest(t, handler, http.MethodPost, "/api/rules", `{"pattern":"(?!x)"}`, true)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid pattern status = %d, want 400", rec.Code)
 	}
 
 	// Update pattern.
-	rec = authedRequest(t, handler, http.MethodPut, "/api/chats/100/rules/1", `{"pattern":"广告.*加群"}`, true)
+	rec = authedRequest(t, handler, http.MethodPut, "/api/rules/1", `{"pattern":"广告.*加群"}`, true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	if rules := ruleStore.byChat[100]; rules[0].Pattern != "广告.*加群" {
-		t.Fatalf("pattern not updated: %+v", rules[0])
+	if len(ruleStore.rules) == 0 || ruleStore.rules[0].Pattern != "广告.*加群" {
+		t.Fatalf("pattern not updated: %+v", ruleStore.rules)
 	}
 
 	// Toggle off.
-	rec = authedRequest(t, handler, http.MethodPatch, "/api/chats/100/rules/1", `{"enabled":false}`, true)
+	rec = authedRequest(t, handler, http.MethodPatch, "/api/rules/1", `{"enabled":false}`, true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("disable status = %d", rec.Code)
 	}
-	if rules := ruleStore.byChat[100]; rules[0].Enabled {
+	if ruleStore.rules[0].Enabled {
 		t.Fatal("rule still enabled after PATCH")
 	}
 
 	// Delete.
-	rec = authedRequest(t, handler, http.MethodDelete, "/api/chats/100/rules/1", "", true)
+	rec = authedRequest(t, handler, http.MethodDelete, "/api/rules/1", "", true)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("delete status = %d", rec.Code)
 	}
-	if len(ruleStore.byChat[100]) != 0 {
+	if len(ruleStore.rules) != 0 {
 		t.Fatal("rule not removed")
 	}
 
 	// 404 for a missing rule.
-	rec = authedRequest(t, handler, http.MethodDelete, "/api/chats/100/rules/9", "", true)
+	rec = authedRequest(t, handler, http.MethodDelete, "/api/rules/9", "", true)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("delete missing = %d, want 404", rec.Code)
+	}
+}
+
+func TestRuleExport(t *testing.T) {
+	_, ruleStore, _, _, _, handler := newTestPanel(t, nil)
+	// Seed rules through the API to keep the fake in sync.
+	if rec := authedRequest(t, handler, http.MethodPost, "/api/rules", `{"pattern":"免费.*领取"}`, true); rec.Code != http.StatusCreated {
+		t.Fatalf("seed status = %d", rec.Code)
+	}
+	if rec := authedRequest(t, handler, http.MethodPost, "/api/rules", `{"pattern":"https?://\\S+\\\\.example"}`, true); rec.Code != http.StatusCreated {
+		t.Fatalf("seed status = %d", rec.Code)
+	}
+
+	rec := authedRequest(t, handler, http.MethodGet, "/api/rules/export", "", false)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("export status = %d", rec.Code)
+	}
+	if cd := rec.Header().Get("Content-Disposition"); !strings.Contains(cd, "rules-export.json") {
+		t.Fatalf("Content-Disposition = %q", cd)
+	}
+	var exported []exportRuleDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &exported); err != nil {
+		t.Fatal(err)
+	}
+	if len(exported) != 2 || exported[0].Pattern != "免费.*领取" || !exported[0].Enabled {
+		t.Fatalf("exported rules = %+v (store has %d)", exported, len(ruleStore.rules))
 	}
 }
 
@@ -454,7 +485,7 @@ func TestRuleTestEndpoint(t *testing.T) {
 
 func TestRuleWriteWarningOnRefreshFailure(t *testing.T) {
 	_, _, _, _, _, handler := newTestPanel(t, errors.New("boom"))
-	rec := authedRequest(t, handler, http.MethodPost, "/api/chats/100/rules", `{"pattern":"免费.*领取"}`, true)
+	rec := authedRequest(t, handler, http.MethodPost, "/api/rules", `{"pattern":"免费.*领取"}`, true)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("add with refresh failure = %d, body=%s", rec.Code, rec.Body.String())
 	}
@@ -615,11 +646,11 @@ func TestUnknownAPIReturnsJSON404(t *testing.T) {
 	}
 }
 
-func TestInvalidChatIDParam(t *testing.T) {
+func TestInvalidRuleIDParam(t *testing.T) {
 	_, _, _, _, _, handler := newTestPanel(t, nil)
-	rec := authedRequest(t, handler, http.MethodGet, "/api/chats/not-a-number/rules", "", true)
+	rec := authedRequest(t, handler, http.MethodPatch, "/api/rules/not-a-number", `{"enabled":false}`, true)
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("invalid chat id = %d, want 400", rec.Code)
+		t.Fatalf("invalid rule id = %d, want 400", rec.Code)
 	}
 }
 

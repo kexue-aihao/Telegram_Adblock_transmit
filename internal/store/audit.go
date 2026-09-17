@@ -99,6 +99,24 @@ func scanAuditRow(row interface{ Scan(dest ...any) error }) (domain.AuditEntry, 
 	return entry, err
 }
 
+// CountHits counts moderation hits recorded for a user in a chat since the
+// given instant. Audit rows are written only when a rule or built-in hit
+// fired, so this doubles as the strike counter for the ban policy.
+func (r *AuditRepository) CountHits(ctx context.Context, chatID, userID int64, since time.Time) (int64, error) {
+	if r == nil || r.pool == nil {
+		return 0, fmt.Errorf("audit repository is nil")
+	}
+	var count int64
+	err := r.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM moderation_audit_logs
+		WHERE chat_id = $1 AND user_id = $2 AND occurred_at >= $3`,
+		chatID, userID, since).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count moderation hits: %w", err)
+	}
+	return count, nil
+}
+
 // ListAudit returns a page of audit entries matching q. Filters are optional;
 // pagination values are normalized here (page >= 1, page size 1..100, default
 // 20). The total is computed in the same round trip via a window COUNT(*).
@@ -321,6 +339,7 @@ func truncateRunes(value string, limit int) string {
 var _ interface {
 	Record(context.Context, domain.NewAuditEntry) error
 	ListRecent(context.Context, int64, int) ([]domain.AuditEntry, error)
+	CountHits(context.Context, int64, int64, time.Time) (int64, error)
 	DeleteExpired(context.Context, time.Time) (int64, error)
 } = (*AuditRepository)(nil)
 var _ ports.PanelAuditStore = (*AuditRepository)(nil)

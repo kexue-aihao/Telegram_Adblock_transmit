@@ -287,39 +287,29 @@ function renderTrendChart(data, id) {
   return table;
 }
 
-/* ── Rules ───────────────────────────────────────────────────── */
+/* ── Rules (global across all groups) ────────────────────────── */
 
 async function renderRules(view) {
   const wrap = el("div");
   empty(view).append(wrap);
   try {
-    const [chats, selectedRules] = await loadRulesData();
-    await paintRules(wrap, chats, selectedRules);
+    const rules = (await api("/api/rules")) || [];
+    paintRules(wrap, rules);
   } catch (err) { renderError(view, err); }
 }
 
-async function loadRulesData() {
-  const chats = await api("/api/chats");
-  state.chats = chats || [];
-  if (state.activeChat === undefined) state.activeChat = "";
-  await refreshSelectedRules();
-  return [state.chats, state.selectedRules];
-}
-
-async function refreshSelectedRules() {
-  state.selectedRules = [];
-  if (state.activeChat !== "") {
-    state.selectedRules = await api(`/api/chats/${state.activeChat}/rules`);
-  }
-}
-
-async function paintRules(wrap, chats, selectedRules) {
+function paintRules(wrap, rules) {
   empty(wrap);
+  const enabledCount = rules.filter((r) => r.enabled).length;
   wrap.append(
     el("h2", null, "规则管理"),
-    el("p", { class: "page-desc" }, "按群组维护广告拦截正则，改动即时生效"),
-    rulesToolbar(chats),
-    el("div", { id: "rule-summary" }),
+    el("p", { class: "page-desc" }, "全局共享广告拦截正则，对所有群组即时生效"),
+    el("div", { class: "toolbar" },
+      el("div", { class: "grow" }),
+      el("button", { class: "btn", onclick: downloadRuleExport }, "导出规则"),
+      el("button", { class: "btn primary sm", onclick: () => openRuleModal(null) }, "＋ 新增规则")),
+    el("div", { class: "hint", style: "margin-bottom:14px" },
+      `共 ${rules.length} 条规则（全局共享，所有群组生效），启用 ${enabledCount} 条。`),
   );
 
   const tableWrap = el("div", { class: "table-wrap" });
@@ -332,14 +322,12 @@ async function paintRules(wrap, chats, selectedRules) {
   tableWrap.append(table);
   wrap.append(tableWrap);
 
-  const summary = document.getElementById("rule-summary");
-  if (!selectedRules.length) {
-    empty(summary).append(el("div", { class: "empty" }, "该群组暂无规则，点击右上角「新增规则」添加。"));
+  if (!rules.length) {
+    tbody.append(el("tr", null, el("td", { colspan: 5, class: "empty", style: "text-align:center" },
+      "暂无规则，点击「新增规则」添加（全局规则对所有群组生效）。")));
     return;
   }
-  empty(summary).append(el("div", { class: "hint" },
-    `共 ${selectedRules.length} 条规则，启用 ${selectedRules.filter((r) => r.enabled).length} 条。`));
-  for (const rule of selectedRules) {
+  for (const rule of rules) {
     const statusBadge = rule.enabled
       ? el("span", { class: "badge ok" }, "启用")
       : el("span", { class: "badge muted" }, "停用");
@@ -358,53 +346,11 @@ async function paintRules(wrap, chats, selectedRules) {
   }
 }
 
-function rulesToolbar(chats) {
-  const select = el("select", { id: "chat-select", onchange: async (e) => {
-    const value = e.target.value;
-    if (value === "__manual") return; // manual input is separate
-    state.activeChat = value;
-    try {
-      await refreshSelectedRules();
-      await paintRules(document.getElementById("view"), state.chats, state.selectedRules);
-    } catch (err) { toast(err.message, "err"); }
-  } },
-    el("option", { value: "" }, "选择群组…"),
-    chats.map((chat) => el("option", { value: String(chat.id) },
-      (chat.title ? chat.title : `群组 ${chat.id}`) + `（${chat.id}，规则 ${chat.rule_count}）`)),
-    el("option", { value: "__manual" }, "＋ 手动输入群组 ID…"),
-  );
-  const manualInput = el("input", { id: "manual-chat", placeholder: "手工群组 ID（冷启动群组）", hidden: true });
-  select.addEventListener("change", () => {
-    manualInput.hidden = select.value !== "__manual";
-    if (select.value === "__manual") manualInput.focus();
-  });
-  const applyManual = el("button", {
-    class: "btn sm", hidden: true, onclick: async () => {
-      const value = manualInput.value.trim();
-      if (!value || !/^-?\d+$/.test(value)) { toast("群组 ID 无效", "err"); return; }
-      state.activeChat = value;
-      try {
-        await refreshSelectedRules();
-        await paintRules(document.getElementById("view"), state.chats, state.selectedRules);
-        manualInput.hidden = true; applyManual.hidden = true;
-      } catch (err) { toast(err.message, "err"); }
-    },
-  }, "确定");
-  const syncManual = () => { applyManual.hidden = manualInput.hidden = select.value !== "__manual"; };
-  select.addEventListener("change", syncManual);
-
-  const add = el("button", { class: "btn primary sm", onclick: () => openRuleModal(null) }, "＋ 新增规则");
-  return el("div", { class: "toolbar" }, select, manualInput, applyManual, el("div", { class: "grow" }), add);
-}
-
 async function toggleRule(rule) {
   try {
-    await api(`/api/chats/${state.activeChat}/rules/${rule.id}`, {
-      method: "PATCH", body: { enabled: !rule.enabled },
-    });
+    await api(`/api/rules/${rule.id}`, { method: "PATCH", body: { enabled: !rule.enabled } });
     toast(rule.enabled ? "规则已停用" : "规则已启用");
-    await refreshSelectedRules();
-    await paintRules(document.getElementById("view"), state.chats, state.selectedRules);
+    await renderRules(document.getElementById("view"));
   } catch (err) { toast(err.message, "err"); }
 }
 
@@ -418,18 +364,17 @@ async function confirmDeleteRule(rule) {
     el("button", { class: "btn", onclick: () => modal.close() }, "取消"),
     el("button", { class: "btn danger", onclick: async () => {
       try {
-        await api(`/api/chats/${state.activeChat}/rules/${rule.id}`, { method: "DELETE" });
+        await api(`/api/rules/${rule.id}`, { method: "DELETE" });
         toast("规则已删除");
         modal.close();
-        await refreshSelectedRules();
-        await paintRules(document.getElementById("view"), state.chats, state.selectedRules);
+        await renderRules(document.getElementById("view"));
       } catch (err) { toast(err.message, "err"); }
     } }, "删除"));
 }
 
 function openRuleModal(rule) {
   const editing = !!rule;
-  const modal = openModal(editing ? `编辑规则 #${rule.id}` : "新增规则", `群组 ${state.activeChat || "—"}`);
+  const modal = openModal(editing ? `编辑规则 #${rule.id}` : "新增规则", "全局规则（所有群组生效）");
 
   const pattern = el("input", { id: "rm-pattern", class: "mono", value: rule ? rule.pattern : "", required: true,
     placeholder: "例如：免费.*领取" });
@@ -470,19 +415,41 @@ function openRuleModal(rule) {
       if (!value) { errorBox.append(el("div", { class: "form-error" }, "正则表达式不能为空。")); return; }
       try {
         if (editing) {
-          await api(`/api/chats/${state.activeChat}/rules/${rule.id}`, { method: "PUT", body: { pattern: value } });
+          await api(`/api/rules/${rule.id}`, { method: "PUT", body: { pattern: value } });
           toast("规则已更新");
         } else {
-          await api(`/api/chats/${state.activeChat}/rules`, { method: "POST", body: { pattern: value } });
-          toast("规则已添加");
+          await api("/api/rules", { method: "POST", body: { pattern: value } });
+          toast("规则已添加（对所有群组生效）");
         }
         modal.close();
-        await refreshSelectedRules();
-        await paintRules(document.getElementById("view"), state.chats, state.selectedRules);
+        await renderRules(document.getElementById("view"));
       } catch (err2) {
         errorBox.append(el("div", { class: "form-error" }, err2.message));
       }
     } }, editing ? "保存" : "添加"));
+}
+
+// downloadRuleExport fetches the global rule set and saves it as a JSON file.
+async function downloadRuleExport() {
+  try {
+    const res = await fetch("/api/rules/export", {
+      credentials: "same-origin",
+      headers: { "X-Requested-With": "fetch" },
+    });
+    if (!res.ok) {
+      let data = null;
+      try { data = await res.json(); } catch { /* ignore */ }
+      throw new Error((data && data.error) || `导出失败（${res.status}）`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = el("a", { href: url, download: "rules-export.json" });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+    toast("规则已导出");
+  } catch (err) { toast(err.message, "err"); }
 }
 
 /* ── Audit ───────────────────────────────────────────────────── */

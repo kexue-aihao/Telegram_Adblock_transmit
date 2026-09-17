@@ -147,11 +147,14 @@ func (s *Server) routes() {
 	mux.Handle("GET /api/dashboard/trend", authed(s.handleDashboardTrend))
 
 	mux.Handle("GET /api/chats", authed(s.handleListChats))
-	mux.Handle("GET /api/chats/{chatID}/rules", authed(s.handleListRules))
-	mux.Handle("POST /api/chats/{chatID}/rules", authedCSRF(s.handleAddRule))
-	mux.Handle("PUT /api/chats/{chatID}/rules/{ruleID}", authedCSRF(s.handleUpdatePattern))
-	mux.Handle("PATCH /api/chats/{chatID}/rules/{ruleID}", authedCSRF(s.handleSetEnabled))
-	mux.Handle("DELETE /api/chats/{chatID}/rules/{ruleID}", authedCSRF(s.handleRemoveRule))
+	// Rules are global: they live at /api/rules, shared by every group.
+	// The old /api/chats/{chatID}/rules namespace was removed.
+	mux.Handle("GET /api/rules", authed(s.handleListRules))
+	mux.Handle("POST /api/rules", authedCSRF(s.handleAddRule))
+	mux.Handle("PUT /api/rules/{ruleID}", authedCSRF(s.handleUpdatePattern))
+	mux.Handle("PATCH /api/rules/{ruleID}", authedCSRF(s.handleSetEnabled))
+	mux.Handle("DELETE /api/rules/{ruleID}", authedCSRF(s.handleRemoveRule))
+	mux.Handle("GET /api/rules/export", authed(s.handleExportRules))
 	mux.Handle("POST /api/rules/test", authedCSRF(s.handleRuleTest))
 
 	mux.Handle("GET /api/audit", authed(s.handleListAudit))

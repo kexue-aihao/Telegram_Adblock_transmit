@@ -66,6 +66,28 @@ func TestClientRedactsTokenFromHTTPError(t *testing.T) {
 	}
 }
 
+func TestClientBanChatMemberUsesEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/bottest-token/banChatMember" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		if r.Form.Get("chat_id") != "-100" || r.Form.Get("user_id") != "42" || r.Form.Get("revoke_messages") != "true" {
+			t.Fatalf("unexpected form: %v", r.Form)
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+	}))
+	defer server.Close()
+
+	bot := &tgbotapi.BotAPI{Token: "test-token", Client: server.Client()}
+	client := NewClientWithAPIEndpoint(bot, server.URL+"/bot%s/%s")
+	if err := client.BanChatMember(context.Background(), -100, 42); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestClientSendMessageUsesEndpointAndTopic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/bottest-token/sendMessage" {

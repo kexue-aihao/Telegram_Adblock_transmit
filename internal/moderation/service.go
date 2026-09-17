@@ -44,6 +44,12 @@ type Service struct {
 	logger      *slog.Logger
 	botUsername string
 	builtin     *builtin.Checker
+
+	// spamStrikeLimit / spamStrikeWindow implement the "three-strike" ban: a
+	// non-admin user whose messages hit rules (or the built-in filter) that
+	// many times within the window is permanently banned.
+	spamStrikeLimit  int
+	spamStrikeWindow time.Duration
 }
 
 // NewService builds a moderation service. A nil logger falls back to the
@@ -70,6 +76,16 @@ func (s *Service) SetBuiltinFilter(filter *builtin.Checker) {
 	if s != nil {
 		s.builtin = filter
 	}
+}
+
+// SetSpamPolicy configures the three-strike ban. A limit below 1 disables the
+// ban. The window bounds how far back hit counts are considered.
+func (s *Service) SetSpamPolicy(limit int, window time.Duration) {
+	if s == nil {
+		return
+	}
+	s.spamStrikeLimit = limit
+	s.spamStrikeWindow = window
 }
 
 // NewProcessor is retained as a descriptive alias for callers migrating from
@@ -271,6 +287,9 @@ func (s *Service) enforce(ctx context.Context, message domain.ModerationMessage,
 	} else {
 		auditErr = errors.New("audit store is nil")
 	}
+	if auditErr == nil && entry.UserID != nil && s.spamStrikeLimit > 0 && s.audit != nil && s.telegram != nil {
+		s.maybeBanSpammer(ctx, message, *entry.UserID)
+	}
 	if deleteSucceeded && s.telegram != nil {
 		if err := s.telegram.SendMessage(ctx, message.ChatID, message.MessageThreadID, ModerationNotice); err != nil {
 			s.logger.Warn("unable to send moderation notice", "chat_id", message.ChatID, "message_id", message.MessageID, "error", err)
@@ -280,6 +299,37 @@ func (s *Service) enforce(ctx context.Context, message domain.ModerationMessage,
 		return deleteSucceeded, auditErr
 	}
 	return deleteSucceeded, nil
+}
+
+// maybeBanSpammer permanently bans a non-admin user whose ad hits (built-in
+// or rule-matched, all recorded in the audit log) reach the strike limit
+// within the window.
+func (s *Service) maybeBanSpammer(ctx context.Context, message domain.ModerationMessage, userID int64) {
+	window := s.spamStrikeWindow
+	if window <= 0 {
+		window = 24 * time.Hour
+	}
+	hits, err := s.audit.CountHits(ctx, message.ChatID, userID, time.Now().Add(-window))
+	if err != nil {
+		s.logger.Warn("unable to count ad hits", "chat_id", message.ChatID, "user_id", userID, "error", err)
+		return
+	}
+	if hits < int64(s.spamStrikeLimit) {
+		return
+	}
+	admin, err := s.telegram.IsGroupAdmin(ctx, message.ChatID, userID)
+	if err != nil {
+		s.logger.Warn("unable to check admin status before ban", "chat_id", message.ChatID, "user_id", userID, "error", err)
+		return
+	}
+	if admin {
+		return
+	}
+	if err := s.telegram.BanChatMember(ctx, message.ChatID, userID); err != nil {
+		s.logger.Warn("unable to ban ad spammer", "chat_id", message.ChatID, "user_id", userID, "hits", hits, "error", err)
+		return
+	}
+	s.logger.Warn("user banned for ad spam", "chat_id", message.ChatID, "user_id", userID, "hits", hits)
 }
 
 // HandleCommand handles management commands. Unauthorized recognized commands

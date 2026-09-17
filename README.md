@@ -12,6 +12,8 @@
 - 检查新消息和编辑消息的 `text`、媒体 `caption`。
 - 命中规则后删除消息，并记录删除成功或失败的审计记录。
 - 内置广告灭杀病毒库（默认开启）：无需配置即可识别邀请链接/短链/广告词组合、艾特外部机器人、频道转发广告，命中即删并在审计中标记「⚡内置」；可用 `ADFILTER_ENABLED=false` 关闭。
+- 规则全局共享：任何群添加/修改的规则对所有群组即时生效（不再按群隔离）。面板「规则管理」页可一键导出全部规则为 JSON 备份。
+- 广告三次封禁：同一用户在同一群组 24 小时内命中广告（用户规则 + 内置病毒库都计入）达到 3 次，自动永久封禁并踢出（`SPAM_STRIKE_LIMIT`/`SPAM_STRIKE_WINDOW` 可调）。
 - 在 Forum Topics 群组中沿用原消息的 `message_thread_id` 发送提示。
 - 管理员可以在线新增、删除、启用、停用和测试规则。
 - 审计日志保留 30 天，内容摘要最多 120 个字符，并保存 SHA-256 摘要。
@@ -398,7 +400,9 @@ curl -fsS http://127.0.0.1:8080/healthz   # 返回 ok
 | `WEBUI_USERNAME` | 无 | 面板启用时必需 | 面板登录用户名，仅允许字母、数字、`_ . -`，1-64 字符 |
 | `WEBUI_PASSWORD` | 无 | 面板启用时必需 | 面板登录密码，请使用长随机值 |
 | `WEBUI_SESSION_SECRET` | 无 | 否 | 会话签名密钥；固定后重启不登出，不设则每次重启需重新登录 |
-| `ADFILTER_ENABLED` | `true` | 否 | 内置广告灭杀病毒库总开关；关闭后仅依赖各群自定义规则 |
+| `ADFILTER_ENABLED` | `true` | 否 | 内置广告灭杀病毒库总开关；关闭后仅依赖全局自定义规则 |
+| `SPAM_STRIKE_LIMIT` | `3` | 否 | 同用户同群在窗口内命中广告次数达到该值即永久封禁踢出；<1 代表关闭 |
+| `SPAM_STRIKE_WINDOW` | `24h` | 否 | 封禁计数的滚动时间窗口 |
 
 端点安全规则：HTTPS 默认允许；HTTP 必须设置 `TELEGRAM_ALLOW_INSECURE_HTTP=true`，并且主机只能是回环地址、私网 IP、`localhost`、`host.docker.internal`、`gateway.docker.internal` 或单标签 Docker 服务名。
 

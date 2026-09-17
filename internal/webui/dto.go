@@ -43,6 +43,27 @@ func toRuleDTOs(rules []domain.Rule) []ruleDTO {
 	return result
 }
 
+// exportRuleDTO is the downloadable JSON shape used by the rule export
+// endpoint for backups and sharing between installs.
+type exportRuleDTO struct {
+	Pattern   string    `json:"pattern"`
+	Enabled   bool      `json:"enabled"`
+	CreatedBy int64     `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func toExportRuleDTO(rule domain.Rule) exportRuleDTO {
+	return exportRuleDTO{Pattern: rule.Pattern, Enabled: rule.Enabled, CreatedBy: rule.CreatedBy, CreatedAt: rule.CreatedAt.UTC()}
+}
+
+func toExportRuleDTOs(rules []domain.Rule) []exportRuleDTO {
+	out := make([]exportRuleDTO, 0, len(rules))
+	for _, rule := range rules {
+		out = append(out, toExportRuleDTO(rule))
+	}
+	return out
+}
+
 type chatDTO struct {
 	ID           int64  `json:"id"`
 	Title        string `json:"title"`

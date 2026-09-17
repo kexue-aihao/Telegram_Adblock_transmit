@@ -13,6 +13,9 @@ import (
 // group IDs negative, so -1 is unambiguous and is documented in the README.
 const createdByPanel int64 = -1
 
+// Rules are global: they live at /api/rules and are shared by every group.
+// The store ignores the chat_id parameters, so handlers pass 0 here.
+
 func (s *Server) handleListChats(w http.ResponseWriter, r *http.Request) {
 	chats, err := s.options.ChatStore.ListChats(r.Context())
 	if err != nil {
@@ -23,12 +26,7 @@ func (s *Server) handleListChats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListRules(w http.ResponseWriter, r *http.Request) {
-	chatID, ok := pathInt64(r, "chatID")
-	if !ok {
-		writeError(w, http.StatusBadRequest, "无效的群组 ID。", "invalid_chat_id")
-		return
-	}
-	rules, err := s.options.RuleStore.List(r.Context(), chatID)
+	rules, err := s.options.RuleStore.List(r.Context(), 0)
 	if err != nil {
 		s.internalError(w, "查询规则失败", err)
 		return
@@ -37,65 +35,60 @@ func (s *Server) handleListRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddRule(w http.ResponseWriter, r *http.Request) {
-	chatID, ok := pathInt64(r, "chatID")
-	if !ok {
-		writeError(w, http.StatusBadRequest, "无效的群组 ID。", "invalid_chat_id")
-		return
-	}
 	var req addRuleRequest
 	if !decodeJSON(w, r, &req) {
 		return
 	}
 	rule, err := s.options.RuleStore.Add(r.Context(), domain.NewRule{
-		ChatID: chatID, ChatTitle: req.ChatTitle, Pattern: req.Pattern, CreatedBy: createdByPanel,
+		ChatID: 0, ChatTitle: "", Pattern: req.Pattern, CreatedBy: createdByPanel,
 	})
 	if err != nil {
 		s.mapRuleError(w, err)
 		return
 	}
-	warning := s.refreshChat(r.Context(), chatID)
+	warning := s.refreshChat(r.Context(), 0)
 	writeWarning(w, http.StatusCreated, toRuleDTO(rule), warning)
 }
 
 func (s *Server) handleUpdatePattern(w http.ResponseWriter, r *http.Request) {
-	chatID, ruleID, ok := rulePathIDs(r)
+	ruleID, ok := pathInt64(r, "ruleID")
 	if !ok {
-		writeError(w, http.StatusBadRequest, "无效的群组或规则 ID。", "invalid_id")
+		writeError(w, http.StatusBadRequest, "无效的规则 ID。", "invalid_id")
 		return
 	}
 	var req updatePatternRequest
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	rule, err := s.options.RuleStore.UpdatePattern(r.Context(), chatID, ruleID, req.Pattern)
+	rule, err := s.options.RuleStore.UpdatePattern(r.Context(), 0, ruleID, req.Pattern)
 	if err != nil {
 		s.mapRuleError(w, err)
 		return
 	}
-	warning := s.refreshChat(r.Context(), chatID)
+	warning := s.refreshChat(r.Context(), 0)
 	writeWarning(w, http.StatusOK, toRuleDTO(rule), warning)
 }
 
 func (s *Server) handleSetEnabled(w http.ResponseWriter, r *http.Request) {
-	chatID, ruleID, ok := rulePathIDs(r)
+	ruleID, ok := pathInt64(r, "ruleID")
 	if !ok {
-		writeError(w, http.StatusBadRequest, "无效的群组或规则 ID。", "invalid_id")
+		writeError(w, http.StatusBadRequest, "无效的规则 ID。", "invalid_id")
 		return
 	}
 	var req setEnabledRequest
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if err := s.options.RuleStore.SetEnabled(r.Context(), chatID, ruleID, req.Enabled); err != nil {
+	if err := s.options.RuleStore.SetEnabled(r.Context(), 0, ruleID, req.Enabled); err != nil {
 		s.mapRuleError(w, err)
 		return
 	}
-	refreshed, err := s.options.RuleStore.List(r.Context(), chatID)
+	refreshed, err := s.options.RuleStore.List(r.Context(), 0)
 	if err != nil {
 		s.internalError(w, "查询规则失败", err)
 		return
 	}
-	warning := s.refreshChat(r.Context(), chatID)
+	warning := s.refreshChat(r.Context(), 0)
 	var updated domain.Rule
 	for _, rule := range refreshed {
 		if rule.ID == ruleID {
@@ -107,17 +100,29 @@ func (s *Server) handleSetEnabled(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRemoveRule(w http.ResponseWriter, r *http.Request) {
-	chatID, ruleID, ok := rulePathIDs(r)
+	ruleID, ok := pathInt64(r, "ruleID")
 	if !ok {
-		writeError(w, http.StatusBadRequest, "无效的群组或规则 ID。", "invalid_id")
+		writeError(w, http.StatusBadRequest, "无效的规则 ID。", "invalid_id")
 		return
 	}
-	if err := s.options.RuleStore.Remove(r.Context(), chatID, ruleID); err != nil {
+	if err := s.options.RuleStore.Remove(r.Context(), 0, ruleID); err != nil {
 		s.mapRuleError(w, err)
 		return
 	}
-	s.refreshChat(r.Context(), chatID) // cleanup best-effort; deletion is committed
+	s.refreshChat(r.Context(), 0) // cleanup best-effort; deletion is committed
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleExportRules returns the full global rule set as a downloadable JSON
+// document the operator can keep as a backup or share with another install.
+func (s *Server) handleExportRules(w http.ResponseWriter, r *http.Request) {
+	rules, err := s.options.RuleStore.List(r.Context(), 0)
+	if err != nil {
+		s.internalError(w, "导出规则失败", err)
+		return
+	}
+	w.Header().Set("Content-Disposition", `attachment; filename="rules-export.json"`)
+	writeJSON(w, http.StatusOK, toExportRuleDTOs(rules))
 }
 
 // handleRuleTest dry-runs a pattern against sample text without saving it.
@@ -150,25 +155,13 @@ func (s *Server) handleCacheReload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func rulePathIDs(r *http.Request) (chatID, ruleID int64, ok bool) {
-	chatID, ok = pathInt64(r, "chatID")
-	if !ok {
-		return 0, 0, false
-	}
-	ruleID, ok = pathInt64(r, "ruleID")
-	if !ok {
-		return 0, 0, false
-	}
-	return chatID, ruleID, true
-}
-
 // mapRuleError translates store and validation sentinels into HTTP responses.
 func (s *Server) mapRuleError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrRuleNotFound):
 		writeError(w, http.StatusNotFound, "规则不存在。", "rule_not_found")
 	case errors.Is(err, store.ErrRuleLimitExceeded):
-		writeError(w, http.StatusConflict, "该群组的规则数量或正则总长度已达上限。", "rule_limit_exceeded")
+		writeError(w, http.StatusConflict, "规则数量或正则总长度已达上限。", "rule_limit_exceeded")
 	default:
 		var invalid *rules.InvalidPatternError
 		if errors.As(err, &invalid) {

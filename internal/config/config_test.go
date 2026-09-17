@@ -180,3 +180,35 @@ func TestParseAdFilterEnabledDefaultsToOn(t *testing.T) {
 		t.Fatal("a typo must never silently disable the ad filter")
 	}
 }
+
+func TestLoadSpamStrikeDefaultsAndOverrides(t *testing.T) {
+	t.Setenv("BOT_TOKEN", "token")
+	t.Setenv("DATABASE_URL", "postgres://localhost/db")
+	t.Setenv("SPAM_STRIKE_LIMIT", "")
+	t.Setenv("SPAM_STRIKE_WINDOW", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SpamStrikeLimit != 3 || cfg.SpamStrikeWindow != 24*time.Hour {
+		t.Fatalf("defaults = limit %d window %s", cfg.SpamStrikeLimit, cfg.SpamStrikeWindow)
+	}
+	t.Setenv("SPAM_STRIKE_LIMIT", "5")
+	t.Setenv("SPAM_STRIKE_WINDOW", "6h")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SpamStrikeLimit != 5 || cfg.SpamStrikeWindow != 6*time.Hour {
+		t.Fatalf("overrides = limit %d window %s", cfg.SpamStrikeLimit, cfg.SpamStrikeWindow)
+	}
+	t.Setenv("SPAM_STRIKE_LIMIT", "bogus")
+	t.Setenv("SPAM_STRIKE_WINDOW", "bogus")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SpamStrikeLimit != 3 || cfg.SpamStrikeWindow != 24*time.Hour {
+		t.Fatalf("invalid values should fall back: limit %d window %s", cfg.SpamStrikeLimit, cfg.SpamStrikeWindow)
+	}
+}

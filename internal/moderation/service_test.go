@@ -25,7 +25,9 @@ func (*fakeCache) Replace(int64, []domain.CompiledRule) {}
 func (*fakeCache) Remove(int64)                         {}
 
 type fakeAudit struct {
-	entries []domain.NewAuditEntry
+	entries   []domain.NewAuditEntry
+	hits      int64
+	hitsSince time.Time
 }
 
 func (f *fakeAudit) Record(_ context.Context, entry domain.NewAuditEntry) error {
@@ -35,6 +37,10 @@ func (f *fakeAudit) Record(_ context.Context, entry domain.NewAuditEntry) error 
 func (*fakeAudit) ListRecent(context.Context, int64, int) ([]domain.AuditEntry, error) {
 	return nil, nil
 }
+func (f *fakeAudit) CountHits(_ context.Context, _, _ int64, since time.Time) (int64, error) {
+	f.hitsSince = since
+	return f.hits, nil
+}
 func (*fakeAudit) DeleteExpired(context.Context, time.Time) (int64, error) { return 0, nil }
 
 type fakeTelegram struct {
@@ -42,6 +48,8 @@ type fakeTelegram struct {
 	adminErr    error
 	deleteErr   error
 	deleteCalls []int
+	banCalls    []int64
+	banErr      error
 	sends       []fakeSend
 }
 type fakeSend struct {
@@ -60,6 +68,10 @@ func (f *fakeTelegram) SendMessage(_ context.Context, chatID int64, threadID *in
 }
 func (f *fakeTelegram) IsGroupAdmin(context.Context, int64, int64) (bool, error) {
 	return f.admin, f.adminErr
+}
+func (f *fakeTelegram) BanChatMember(_ context.Context, _ int64, userID int64) error {
+	f.banCalls = append(f.banCalls, userID)
+	return f.banErr
 }
 
 type fakeRules struct{}
@@ -313,6 +325,49 @@ func TestBuiltinFilterSkipWhenDisabled(t *testing.T) {
 	}
 	if len(cache.queries) != 1 || len(audit.entries) != 0 {
 		t.Fatalf("disabled filter touched the moderation path: cache=%v audit=%v", cache.queries, audit.entries)
+	}
+}
+
+func TestThreeStrikePolicyBansNonAdmin(t *testing.T) {
+	tg := &fakeTelegram{admin: false}
+	audit := &fakeAudit{hits: 3}
+	svc := NewService(&fakeRules{}, &fakeCache{matched: []int64{1}}, audit, tg, nil)
+	svc.SetSpamPolicy(3, 24*time.Hour)
+
+	message := testMessage()
+	if deleted, err := svc.HandleUpdate(context.Background(), message); err != nil || !deleted {
+		t.Fatalf("strike hit not deleted: %v, %v", deleted, err)
+	}
+	if len(tg.banCalls) != 1 || tg.banCalls[0] != *message.UserID {
+		t.Fatalf("ban calls = %v, want single ban of user %d", tg.banCalls, *message.UserID)
+	}
+	// The strike window was passed through to the count query.
+	if audit.hitsSince.IsZero() {
+		t.Fatal("CountHits was not called with a window")
+	}
+}
+
+func TestThreeStrikePolicySkipsAdminsAndUnderLimit(t *testing.T) {
+	// Three hits by an admin must not trigger a ban.
+	adminTG := &fakeTelegram{admin: true}
+	svc := NewService(&fakeRules{}, &fakeCache{matched: []int64{1}}, &fakeAudit{hits: 3}, adminTG, nil)
+	svc.SetSpamPolicy(3, 24*time.Hour)
+	if _, err := svc.HandleUpdate(context.Background(), testMessage()); err != nil {
+		t.Fatal(err)
+	}
+	if len(adminTG.banCalls) != 0 {
+		t.Fatalf("admin user was banned: %v", adminTG.banCalls)
+	}
+
+	// Two hits are under the limit and must not trigger a ban.
+	lightTG := &fakeTelegram{admin: false}
+	svc2 := NewService(&fakeRules{}, &fakeCache{matched: []int64{1}}, &fakeAudit{hits: 2}, lightTG, nil)
+	svc2.SetSpamPolicy(3, 24*time.Hour)
+	if _, err := svc2.HandleUpdate(context.Background(), testMessage()); err != nil {
+		t.Fatal(err)
+	}
+	if len(lightTG.banCalls) != 0 {
+		t.Fatalf("sub-limit user was banned: %v", lightTG.banCalls)
 	}
 }
 

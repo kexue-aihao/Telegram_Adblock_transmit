@@ -25,6 +25,7 @@ type RuleCache interface {
 type AuditStore interface {
 	Record(ctx context.Context, entry domain.NewAuditEntry) error
 	ListRecent(ctx context.Context, chatID int64, limit int) ([]domain.AuditEntry, error)
+	CountHits(ctx context.Context, chatID, userID int64, since time.Time) (int64, error)
 	DeleteExpired(ctx context.Context, before time.Time) (int64, error)
 }
 
@@ -32,4 +33,7 @@ type TelegramClient interface {
 	DeleteMessage(ctx context.Context, chatID int64, messageID int) error
 	SendMessage(ctx context.Context, chatID int64, threadID *int, text string) error
 	IsGroupAdmin(ctx context.Context, chatID, userID int64) (bool, error)
+	// BanChatMember permanently bans (and kicks) a user from the chat,
+	// revoking their past messages. Used by the three-strike ad policy.
+	BanChatMember(ctx context.Context, chatID, userID int64) error
 }

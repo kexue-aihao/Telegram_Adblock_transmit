@@ -16,7 +16,7 @@ func mustCompiled(t *testing.T, id int64, pattern string) domain.CompiledRule {
 	return domain.CompiledRule{Rule: domain.Rule{ID: id, Pattern: pattern, Enabled: true}, PatternMatcher: matcher}
 }
 
-func TestMemoryCacheMatchesAllRulesPerChat(t *testing.T) {
+func TestMemoryCacheMatchesAllRulesGlobally(t *testing.T) {
 	cache := NewMemoryCache()
 	cache.Replace(1, []domain.CompiledRule{
 		mustCompiled(t, 20, "sale"),
@@ -27,8 +27,17 @@ func TestMemoryCacheMatchesAllRulesPerChat(t *testing.T) {
 	if len(got) != 2 || got[0] != 10 || got[1] != 20 {
 		t.Fatalf("Match() = %v, want [10 20]", got)
 	}
-	if got := cache.Match(2, "FREE sale"); len(got) != 0 {
-		t.Fatalf("rules leaked across chats: %v", got)
+	// Rules are global: a different chat id must match the same rule set.
+	if got := cache.Match(2, "FREE sale"); len(got) != 2 {
+		t.Fatalf("global rule set not shared across chats: %v", got)
+	}
+	// Replace under any chat id refreshes the single shared set.
+	cache.Replace(999, []domain.CompiledRule{mustCompiled(t, 30, "clearance")})
+	if got := cache.Match(1, "FREE sale"); len(got) != 0 {
+		t.Fatalf("stale global rules after Replace: %v", got)
+	}
+	if got := cache.Match(1, "clearance"); len(got) != 1 || got[0] != 30 {
+		t.Fatalf("replacement not active: %v", got)
 	}
 }
 

@@ -35,6 +35,12 @@ type Config struct {
 	// deletes forwarded ads and @-mentioned external bots in every group. It
 	// defaults to true so protection is on out of the box.
 	AdFilterEnabled bool
+
+	// SpamStrikeLimit is the number of ad hits (per user, per chat, within
+	// SpamStrikeWindow, built-in or user-rule) that permanently bans the user.
+	SpamStrikeLimit int
+	// SpamStrikeWindow bounds the strike counting window.
+	SpamStrikeWindow time.Duration
 }
 
 // WebUIEnabled reports whether the panel HTTP server should be started.
@@ -79,6 +85,13 @@ func Load() (Config, error) {
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "INFO"
 	}
+	cfg.SpamStrikeLimit = intEnv("SPAM_STRIKE_LIMIT", 3)
+	cfg.SpamStrikeWindow = 24 * time.Hour
+	if raw := os.Getenv("SPAM_STRIKE_WINDOW"); raw != "" {
+		if window, err := time.ParseDuration(raw); err == nil && window > 0 {
+			cfg.SpamStrikeWindow = window
+		}
+	}
 	if err := validateWebUI(cfg); err != nil {
 		return Config{}, err
 	}
@@ -122,6 +135,20 @@ func parseAdFilterEnabled() bool {
 	value, err := strconv.ParseBool(raw)
 	if err != nil {
 		return true
+	}
+	return value
+}
+
+// intEnv reads a positive integer env var, falling back to def for missing,
+// empty or invalid values (clamped to at least 1).
+func intEnv(name string, def int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return def
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 {
+		return def
 	}
 	return value
 }

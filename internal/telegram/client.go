@@ -112,6 +112,34 @@ func (c *Client) SendMessage(ctx context.Context, chatID int64, threadID *int, t
 	return err
 }
 
+// BanChatMember permanently bans (and kicks) a user, revoking the messages
+// they posted, mirroring the two dispatch paths used by the other moderation
+// calls (library request vs context-aware raw request).
+func (c *Client) BanChatMember(ctx context.Context, chatID, userID int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if c == nil || c.bot == nil {
+		return errors.New("telegram client is nil")
+	}
+	if c.bot.Client == nil {
+		return errors.New("telegram HTTP client is nil")
+	}
+	if c.apiEndpoint == "" {
+		_, err := c.bot.Request(tgbotapi.BanChatMemberConfig{
+			ChatMemberConfig: tgbotapi.ChatMemberConfig{ChatID: chatID, UserID: userID},
+			RevokeMessages:   true,
+		})
+		return redactTelegramError(err, c.bot.Token)
+	}
+	_, err := c.makeRequest(ctx, "banChatMember", url.Values{
+		"chat_id":         []string{strconv.FormatInt(chatID, 10)},
+		"user_id":         []string{strconv.FormatInt(userID, 10)},
+		"revoke_messages": []string{"true"},
+	})
+	return err
+}
+
 func (c *Client) IsGroupAdmin(ctx context.Context, chatID, userID int64) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err

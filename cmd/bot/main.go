@@ -67,6 +67,7 @@ func run() error {
 	service := moderation.NewService(ruleStore, cache, auditStore, telegramClient, logger)
 	service.SetBotUsername(botAPI.Self.UserName)
 	service.SetBuiltinFilter(builtin.New(cfg.AdFilterEnabled))
+	service.SetSpamPolicy(cfg.SpamStrikeLimit, cfg.SpamStrikeWindow)
 	if err := service.LoadCache(ctx); err != nil {
 		return fmt.Errorf("load moderation rules: %w", err)
 	}
