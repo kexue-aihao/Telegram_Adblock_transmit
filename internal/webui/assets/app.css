@@ -128,6 +128,30 @@ input:focus, select:focus, textarea:focus {
 }
 ::placeholder { color: var(--muted); }
 
+/* ── Select & native form controls ──────────────────────────── */
+/* A select is a field: give it a slightly stronger glass fill so it
+   reads as a control instead of blending into the card, and signal the
+   empty "choose one" entry with the muted placeholder tone. */
+select {
+  cursor: pointer;
+  background: var(--glass-bg-strong);
+  padding-right: 30px; /* room for the native chevron */
+}
+/* Native dropdowns and pickers follow the active theme. Without this the
+   OS renders a light popup in night mode, making option text unreadable. */
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] .switch input { color-scheme: dark; }
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea,
+:root[data-theme="light"] .switch input { color-scheme: light; }
+/* Option list uses the theme palette (dark popup with light text in
+   night mode) instead of defaulting to OS colors. */
+select option { color: var(--text); background: var(--surface); }
+select option[value=""] { color: var(--muted); }
+
 /* ── Top bar ─────────────────────────────────────────────────── */
 .topbar {
   position: sticky; top: 0; z-index: 20;
