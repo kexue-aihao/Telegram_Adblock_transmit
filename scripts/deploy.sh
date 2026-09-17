@@ -10,12 +10,12 @@
 #   之后只需要在 1Panel 里为 Web 面板配置反向代理即可使用。
 #
 # 用法（在服务器终端或 1Panel 终端中执行）:
-#   bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/telegram-adblock-transmit/master/scripts/deploy.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/scripts/deploy.sh)
 #
 # 非交互（环境变量优先，跳过对应交互提示）:
 #   BOT_TOKEN=... POSTGRES_PASSWORD=... WEBUI_ENABLE=1 \
 #     WEBUI_USERNAME=admin WEBUI_PASSWORD=... \
-#     bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/telegram-adblock-transmit/master/scripts/deploy.sh)
+#     bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/scripts/deploy.sh)
 #
 # 可选环境变量: DEPLOY_DIR RAW_BASE BOT_IMAGE WEBUI_ENABLE WEBUI_ADDR
 #               WEBUI_USERNAME WEBUI_PASSWORD WEBUI_SESSION_SECRET
@@ -23,7 +23,7 @@
 set -euo pipefail
 
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/telegram-adblock-transmit}"
-RAW_BASE="${RAW_BASE:-https://raw.githubusercontent.com/kexue-aihao/telegram-adblock-transmit/master}"
+RAW_BASE="${RAW_BASE:-https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master}"
 
 say() { printf '\033[1;32m[deploy]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[deploy]\033[0m %s\n' "$*" >&2; }

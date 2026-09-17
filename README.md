@@ -89,7 +89,7 @@ BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.2.0
 在服务器终端或 1Panel「终端」中执行下面这一行命令，脚本会自动完成部署目录创建、Compose 与 `.env` 模板下载、环境变量引导、镜像拉取和容器启动：
 
 ~~~bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/telegram-adblock-transmit/master/scripts/deploy.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/scripts/deploy.sh)
 ~~~
 
 脚本会依次询问 `BOT_TOKEN`、数据库密码（直接回车自动生成随机密码）以及是否启用 Web 管理面板（需要面板时输入 `y`，再设置面板用户名和密码）。也可以全部用环境变量跳过交互，实现全自动部署：
@@ -101,7 +101,7 @@ POSTGRES_PASSWORD=替换为数据库密码 \
 WEBUI_ENABLE=1 \
 WEBUI_USERNAME=admin \
 WEBUI_PASSWORD=替换为面板密码 \
-bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/telegram-adblock-transmit/master/scripts/deploy.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/scripts/deploy.sh)
 ~~~
 
 常用可选变量：`DEPLOY_DIR`（部署目录，默认 `/opt/telegram-adblock-transmit`）、`BOT_IMAGE`（镜像版本，默认 `latest`，生产建议固定版本）、`WEBUI_ADDR`（监听地址，默认 `0.0.0.0:8080`）。脚本幂等，重复执行安全；已有的 `.env` 配置不会被覆盖，只补齐缺失项。
@@ -133,8 +133,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/telegram-adblock
 ~~~bash
 mkdir -p /opt/telegram-adblock-transmit
 cd /opt/telegram-adblock-transmit
-curl -fL -o docker-compose.pull.yml https://raw.githubusercontent.com/kexue-aihao/telegram-adblock-transmit/master/docker-compose.pull.yml
-curl -fL -o .env.example https://raw.githubusercontent.com/kexue-aihao/telegram-adblock-transmit/master/.env.example
+curl -fL -o docker-compose.pull.yml https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/docker-compose.pull.yml
+curl -fL -o .env.example https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/.env.example
 cp .env.example .env
 chmod 600 .env
 ~~~
