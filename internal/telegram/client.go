@@ -226,10 +226,18 @@ func ConvertUpdate(update tgbotapi.Update) (domain.ModerationMessage, bool) {
 	return FromUpdate(update)
 }
 
+// isHandledChatType reports whether a message from this chat type should reach
+// the moderation service. Groups are moderated; private chats are additionally
+// accepted so /start and /help work in direct messages. Channel posts and other
+// chat kinds are ignored.
+func isHandledChatType(chatType string) bool {
+	return chatType == "group" || chatType == "supergroup" || chatType == "private"
+}
+
 // FromMessage converts a Telegram message. threadID is optional because the
 // current upstream client does not expose message_thread_id on Message.
 func FromMessage(message *tgbotapi.Message, threadID *int) (domain.ModerationMessage, bool) {
-	if message == nil || message.Chat == nil || (message.Chat.Type != "group" && message.Chat.Type != "supergroup") {
+	if message == nil || message.Chat == nil || !isHandledChatType(message.Chat.Type) {
 		return domain.ModerationMessage{}, false
 	}
 	var userID *int64
@@ -284,7 +292,7 @@ func ParseUpdate(data []byte) (domain.ModerationMessage, bool, error) {
 	if message == nil {
 		message = raw.EditedMessage
 	}
-	if message == nil || message.Chat == nil || (message.Chat.Type != "group" && message.Chat.Type != "supergroup") {
+	if message == nil || message.Chat == nil || !isHandledChatType(message.Chat.Type) {
 		return domain.ModerationMessage{}, false, nil
 	}
 	var userID *int64

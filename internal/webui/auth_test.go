@@ -152,6 +152,71 @@ func TestUsernameValidation(t *testing.T) {
 	}
 }
 
+func TestRuntimeCredentialUpdateAndKeyRotation(t *testing.T) {
+	svc, err := newAuthService("admin", "hunter2", []byte("secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	oldToken, _ := svc.issueCookie(now)
+
+	// Rotating the session key invalidates every previously issued token.
+	if err := svc.rotateSessionKey(); err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.verifyToken(oldToken, now.Add(time.Minute)); got != "" {
+		t.Fatal("token survived session-key rotation")
+	}
+
+	// setPassword swaps the accepted password without touching the username.
+	if err := svc.setPassword("newpass12"); err != nil {
+		t.Fatal(err)
+	}
+	if svc.passwordMatches("hunter2") {
+		t.Fatal("old password still accepted after change")
+	}
+	if !svc.passwordMatches("newpass12") {
+		t.Fatal("new password rejected after change")
+	}
+
+	// setUsername swaps the account; the hash is preserved for persistence.
+	if err := svc.setUsername("owner"); err != nil {
+		t.Fatal(err)
+	}
+	if svc.currentUsername() != "owner" {
+		t.Fatalf("currentUsername = %q, want owner", svc.currentUsername())
+	}
+	if got := svc.passwordHashHex(); len(got) != 64 {
+		t.Fatalf("passwordHashHex = %q, want 64 hex chars", got)
+	}
+	fresh, _ := svc.issueCookie(now)
+	if got := svc.verifyToken(fresh, now.Add(time.Minute)); got != "owner" {
+		t.Fatalf("token for updated account not verifiable: %q", got)
+	}
+}
+
+func TestRuntimeCredentialValidation(t *testing.T) {
+	svc, err := newAuthService("admin", "pw", []byte("secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.setUsername("bad user"); err == nil {
+		t.Fatal("setUsername accepted an invalid username")
+	}
+	if err := svc.setPassword(""); err == nil {
+		t.Fatal("setPassword accepted an empty password")
+	}
+	if err := svc.setPassword(strings.Repeat("x", 300)); err == nil {
+		t.Fatal("setPassword accepted an over-long password")
+	}
+	if got := svc.currentUsername(); got != "admin" {
+		t.Fatalf("invalid setUsername mutated state: %q", got)
+	}
+	if !svc.passwordMatches("pw") {
+		t.Fatal("rejected credentials altered the valid password")
+	}
+}
+
 // forgeToken builds a signed token for an arbitrary username with the given
 // session secret, mirroring the production payload layout.
 func forgeToken(t *testing.T, username, secret string) string {

@@ -151,9 +151,31 @@ func (f *fakeRefresher) RefreshChatCache(_ context.Context, chatID int64) error 
 }
 func (f *fakeRefresher) LoadCache(context.Context) error { return f.err }
 
+type fakePanelSettings struct {
+	stored domain.PanelCredentials // zero value => ErrPanelSettingsNotFound
+	err    error
+}
+
+func (f *fakePanelSettings) GetPanelSettings(context.Context) (domain.PanelCredentials, error) {
+	if f.err != nil {
+		return domain.PanelCredentials{}, f.err
+	}
+	if f.stored.Username == "" && f.stored.PasswordHash == "" {
+		return domain.PanelCredentials{}, ports.ErrPanelSettingsNotFound
+	}
+	return f.stored, nil
+}
+func (f *fakePanelSettings) SavePanelSettings(_ context.Context, creds domain.PanelCredentials) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.stored = creds
+	return nil
+}
+
 /* ── Test harness ─────────────────────────────────────────────── */
 
-func newTestPanel(t *testing.T, friction error) (*Server, *fakeRuleStore, *fakePanelAudit, *fakeRefresher, http.Handler) {
+func newTestPanel(t *testing.T, friction error) (*Server, *fakeRuleStore, *fakePanelAudit, *fakeRefresher, *fakePanelSettings, http.Handler) {
 	t.Helper()
 	ruleStore := newFakeRuleStore()
 	chatStore := &fakeChatStore{chats: []domain.ChatSummary{{ID: 100, Title: "测试群"}}}
@@ -161,9 +183,10 @@ func newTestPanel(t *testing.T, friction error) (*Server, *fakeRuleStore, *fakeP
 		{ID: 1, ChatID: 100, MessageID: 7, MatchedRuleIDs: []int64{1}, ContentSummary: "广告", DeleteSucceeded: true, OccurredAt: time.Now()},
 	}}
 	refresher := &fakeRefresher{err: friction}
+	settings := &fakePanelSettings{}
 	s, err := New(Options{
 		Addr: "127.0.0.1:0", RuleStore: ruleStore, ChatStore: chatStore,
-		AuditStore: audit, Refresher: refresher,
+		AuditStore: audit, Refresher: refresher, SettingsStore: settings,
 		Username: "admin", Password: "hunter2", SessionSecret: []byte("test-secret"),
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
@@ -171,7 +194,7 @@ func newTestPanel(t *testing.T, friction error) (*Server, *fakeRuleStore, *fakeP
 		t.Fatal(err)
 	}
 	handler := s.securityHeaders(s.router)
-	return s, ruleStore, audit, refresher, handler
+	return s, ruleStore, audit, refresher, settings, handler
 }
 
 func login(t *testing.T, handler http.Handler) *http.Cookie {
@@ -219,7 +242,7 @@ func authedRequest(t *testing.T, handler http.Handler, method, path, body string
 /* ── Auth flow tests ──────────────────────────────────────────── */
 
 func TestHealthzIsPublic(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -229,7 +252,7 @@ func TestHealthzIsPublic(t *testing.T) {
 }
 
 func TestIndexIsPublic(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -239,7 +262,7 @@ func TestIndexIsPublic(t *testing.T) {
 }
 
 func TestAPIRequiresSession(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	for _, path := range []string{"/api/dashboard/overview", "/api/chats", "/api/audit"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
@@ -251,7 +274,7 @@ func TestAPIRequiresSession(t *testing.T) {
 }
 
 func TestSessionEndpoint(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/session", nil))
 	if rec.Code != http.StatusOK {
@@ -267,7 +290,7 @@ func TestSessionEndpoint(t *testing.T) {
 }
 
 func TestLoginRejected(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"wrong"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -278,7 +301,7 @@ func TestLoginRejected(t *testing.T) {
 }
 
 func TestLoginRateLimited(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	req := func() *http.Request {
 		r := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"wrong"}`))
 		r.Header.Set("Content-Type", "application/json")
@@ -302,7 +325,7 @@ func TestLoginRateLimited(t *testing.T) {
 }
 
 func TestLogoutClearsCookie(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/logout", nil)
 	req.AddCookie(login(t, handler))
 	rec := httptest.NewRecorder()
@@ -325,7 +348,7 @@ func hasCookie(cookies []*http.Cookie, name string, maxAge int) bool {
 /* ── CSRF ─────────────────────────────────────────────────────── */
 
 func TestMutationsRequireCSRFHeader(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	rec := authedRequest(t, handler, http.MethodDelete, "/api/chats/100/rules/1", "", false)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("mutation without CSRF header = %d, want 403", rec.Code)
@@ -335,7 +358,7 @@ func TestMutationsRequireCSRFHeader(t *testing.T) {
 /* ── Rules API ────────────────────────────────────────────────── */
 
 func TestRulesCRUD(t *testing.T) {
-	s, ruleStore, _, refresher, handler := newTestPanel(t, nil)
+	s, ruleStore, _, refresher, _, handler := newTestPanel(t, nil)
 	_ = s
 
 	// List empty chat.
@@ -404,7 +427,7 @@ func TestRulesCRUD(t *testing.T) {
 }
 
 func TestRuleTestEndpoint(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	rec := authedRequest(t, handler, http.MethodPost, "/api/rules/test", `{"pattern":"免费.*领取","text":"本群免费领取大礼包"}`, true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("rule test status = %d, body = %s", rec.Code, rec.Body.String())
@@ -430,7 +453,7 @@ func TestRuleTestEndpoint(t *testing.T) {
 }
 
 func TestRuleWriteWarningOnRefreshFailure(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, errors.New("boom"))
+	_, _, _, _, _, handler := newTestPanel(t, errors.New("boom"))
 	rec := authedRequest(t, handler, http.MethodPost, "/api/chats/100/rules", `{"pattern":"免费.*领取"}`, true)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("add with refresh failure = %d, body=%s", rec.Code, rec.Body.String())
@@ -447,7 +470,7 @@ func TestRuleWriteWarningOnRefreshFailure(t *testing.T) {
 /* ── Audit + dashboard ────────────────────────────────────────── */
 
 func TestListAuditDefaultsAndPagination(t *testing.T) {
-	_, _, audit, _, handler := newTestPanel(t, nil)
+	_, _, audit, _, _, handler := newTestPanel(t, nil)
 	rec := authedRequest(t, handler, http.MethodGet, "/api/audit", "", true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("audit list = %d", rec.Code)
@@ -465,7 +488,7 @@ func TestListAuditDefaultsAndPagination(t *testing.T) {
 }
 
 func TestGetAuditDetailAnd404(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	rec := authedRequest(t, handler, http.MethodGet, "/api/audit/1", "", true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("audit detail = %d", rec.Code)
@@ -477,7 +500,7 @@ func TestGetAuditDetailAnd404(t *testing.T) {
 }
 
 func TestDashboardOverviewAndTrend(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	rec := authedRequest(t, handler, http.MethodGet, "/api/dashboard/overview", "", true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("overview = %d", rec.Code)
@@ -512,7 +535,7 @@ func TestDashboardOverviewAndTrend(t *testing.T) {
 }
 
 func TestCacheReloadEndpoint(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	rec := authedRequest(t, handler, http.MethodPost, "/api/cache/reload", "", true)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("cache reload = %d", rec.Code)
@@ -520,7 +543,7 @@ func TestCacheReloadEndpoint(t *testing.T) {
 }
 
 func TestRealServerServesAssetsAndAuthenticates(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	server := httptest.NewServer(handler) // real listener: exercises the full chain
 	defer server.Close()
 
@@ -577,7 +600,7 @@ func TestRealServerServesAssetsAndAuthenticates(t *testing.T) {
 }
 
 func TestUnknownAPIReturnsJSON404(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	cookie := login(t, handler)
 	req := httptest.NewRequest(http.MethodGet, "/api/nonexistent", nil)
 	req.AddCookie(cookie)
@@ -593,7 +616,7 @@ func TestUnknownAPIReturnsJSON404(t *testing.T) {
 }
 
 func TestInvalidChatIDParam(t *testing.T) {
-	_, _, _, _, handler := newTestPanel(t, nil)
+	_, _, _, _, _, handler := newTestPanel(t, nil)
 	rec := authedRequest(t, handler, http.MethodGet, "/api/chats/not-a-number/rules", "", true)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid chat id = %d, want 400", rec.Code)

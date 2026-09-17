@@ -187,6 +187,7 @@ function renderView() {
   if (state.route === "dashboard") renderDashboard(view);
   else if (state.route === "rules") renderRules(view);
   else if (state.route === "audit") renderAudit(view);
+  else if (state.route === "settings") renderSettings(view);
   else {
     empty(view);
     view.append(el("div", { class: "empty" }, "页面不存在。"),
@@ -605,6 +606,90 @@ async function openAuditDetail(id) {
     ...(entry.deletion_error ? [el("dt", null, "错误信息"), el("dd", null, entry.deletion_error)] : []),
   ));
   modal.actions.append(el("button", { class: "btn", onclick: () => modal.close() }, "关闭"));
+}
+
+/* ── Settings ────────────────────────────────────────────────── */
+
+async function renderSettings(view) {
+  try {
+    const account = await api("/api/settings/account");
+    empty(view).append(
+      el("h2", null, "设置"),
+      el("p", { class: "page-desc" }, "修改面板登录凭据，保存后立即生效并持久化"),
+      renderSettingsAccount(account.username),
+      renderSettingsPassword(),
+    );
+  } catch (err) { renderError(view, err); }
+}
+
+function renderSettingsAccount(username) {
+  return el("div", { class: "card", style: "max-width:480px" },
+    el("h3", null, "登录用户名"),
+    el("p", { class: "hint" }, `当前用户名：${username}。修改后请使用新用户名重新登录。`),
+    el("div", { class: "field" },
+      el("label", { for: "set-user" }, "新用户名（字母、数字、_ . -，1-64 字符）"),
+      el("input", { id: "set-user", value: username, autocomplete: "username", required: true })),
+    el("div", { id: "set-user-err" }),
+    el("div", { class: "actions" },
+      el("button", { id: "set-user-btn", class: "btn primary", onclick: saveUsername }, "保存用户名")),
+  );
+}
+
+function renderSettingsPassword() {
+  return el("div", { class: "card", style: "max-width:480px" },
+    el("h3", null, "登录密码"),
+    el("p", { class: "hint" }, "修改成功后所有已登录会话都会退出，需重新登录。"),
+    el("div", { class: "field" },
+      el("label", { for: "set-pw-current" }, "当前密码"),
+      el("input", { id: "set-pw-current", type: "password", autocomplete: "current-password", required: true })),
+    el("div", { class: "field" },
+      el("label", { for: "set-pw-new" }, "新密码（至少 8 个字符）"),
+      el("input", { id: "set-pw-new", type: "password", autocomplete: "new-password", required: true })),
+    el("div", { class: "field" },
+      el("label", { for: "set-pw-confirm" }, "确认新密码"),
+      el("input", { id: "set-pw-confirm", type: "password", autocomplete: "new-password", required: true })),
+    el("div", { id: "set-pw-err" }),
+    el("div", { class: "actions" },
+      el("button", { id: "set-pw-btn", class: "btn primary", onclick: savePassword }, "保存密码")),
+  );
+}
+
+async function saveUsername() {
+  const input = document.getElementById("set-user");
+  const errorBox = document.getElementById("set-user-err");
+  const btn = document.getElementById("set-user-btn");
+  empty(errorBox);
+  const username = input.value.trim();
+  if (!username) { errorBox.append(el("div", { class: "form-error" }, "用户名不能为空。")); return; }
+  btn.disabled = true;
+  try {
+    await api("/api/settings/account", { method: "POST", body: { username } });
+    state.username = username;
+    toast("用户名已更新，请重新登录");
+    await doLogout();
+  } catch (err) {
+    errorBox.append(el("div", { class: "form-error" }, err.message));
+  } finally { btn.disabled = false; }
+}
+
+async function savePassword() {
+  const errorBox = document.getElementById("set-pw-err");
+  const btn = document.getElementById("set-pw-btn");
+  empty(errorBox);
+  const current = document.getElementById("set-pw-current").value;
+  const next = document.getElementById("set-pw-new").value;
+  const confirm = document.getElementById("set-pw-confirm").value;
+  if (!current || !next) { errorBox.append(el("div", { class: "form-error" }, "请填写当前密码和新密码。")); return; }
+  if (next !== confirm) { errorBox.append(el("div", { class: "form-error" }, "两次输入的新密码不一致。")); return; }
+  if (next.length < 8) { errorBox.append(el("div", { class: "form-error" }, "新密码至少需要 8 个字符。")); return; }
+  btn.disabled = true;
+  try {
+    await api("/api/settings/password", { method: "POST", body: { current_password: current, new_password: next } });
+    toast("密码已更新，请重新登录");
+    await doLogout();
+  } catch (err) {
+    errorBox.append(el("div", { class: "form-error" }, err.message));
+  } finally { btn.disabled = false; }
 }
 
 /* ── Modal ───────────────────────────────────────────────────── */

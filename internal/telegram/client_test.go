@@ -110,9 +110,18 @@ func TestFromMessageFiltersUnsupportedChatsAndCopiesFields(t *testing.T) {
 	if converted.MessageThreadID == nil || *converted.MessageThreadID != 12 {
 		t.Fatalf("thread id not retained: %+v", converted)
 	}
+	// Private chats pass through the conversion so /start and /help work in
+	// direct messages; the moderation service still ignores private text.
 	message.Chat.Type = "private"
+	if converted, ok := FromMessage(message, &threadID); !ok {
+		t.Fatal("private chat should be supported for /start and /help")
+	} else if converted.ChatType != "private" {
+		t.Fatalf("unexpected chat type: %+v", converted)
+	}
+	// Channel posts and other chat kinds remain unsupported.
+	message.Chat.Type = "channel"
 	if _, ok := FromMessage(message, &threadID); ok {
-		t.Fatal("private chat should not be supported")
+		t.Fatal("channel posts should not be supported")
 	}
 }
 

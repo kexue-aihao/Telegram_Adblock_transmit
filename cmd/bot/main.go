@@ -68,14 +68,19 @@ func run() error {
 	if err := service.LoadCache(ctx); err != nil {
 		return fmt.Errorf("load moderation rules: %w", err)
 	}
+	if err := registerBotCommands(botAPI, logger, cfg.BotToken); err != nil {
+		logger.Warn("unable to register bot command menu", "error", err)
+	}
 
 	if cfg.WebUIEnabled() {
+		settingsStore := store.NewPanelSettingsRepository(pool)
 		panel, err := webui.New(webui.Options{
 			Addr:          cfg.WebUIAddr,
 			RuleStore:     ruleStore,
 			ChatStore:     ruleStore,
 			AuditStore:    auditStore,
 			Refresher:     service,
+			SettingsStore: settingsStore,
 			Username:      cfg.WebUIUsername,
 			Password:      cfg.WebUIPassword,
 			SessionSecret: []byte(cfg.WebUISessionSecret),
@@ -103,6 +108,20 @@ func run() error {
 		return nil
 	}
 	return err
+}
+
+// registerBotCommands publishes the command menu via setMyCommands so the
+// Telegram "/" button shows available commands. It is idempotent and re-applied
+// on every start. Only a warning is returned so a menu failure never blocks
+// the poller.
+func registerBotCommands(botAPI *tgbotapi.BotAPI, logger *slog.Logger, token string) error {
+	commands := make([]tgbotapi.BotCommand, 0, len(moderation.BotMenu))
+	for _, info := range moderation.BotMenu {
+		commands = append(commands, tgbotapi.BotCommand{Command: info.Name, Description: info.Description})
+	}
+	_, err := botAPI.Request(tgbotapi.NewSetMyCommands(commands...))
+	logger.Info("bot command menu registered", "commands", len(commands))
+	return telegram.RedactTokenError(err, token)
 }
 
 func newLogger(level string) *slog.Logger {

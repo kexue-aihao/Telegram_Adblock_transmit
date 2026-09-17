@@ -27,22 +27,23 @@ const (
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
 // authService issues and verifies stateless signed session cookies and guards
-// the login endpoint against brute force. Everything lives in memory: no disk
-// writes are needed, which keeps the panel compatible with the read-only
-// container filesystem.
+// the login endpoint against brute force. The username, password hash and
+// session key are mutable so the settings page can change credentials at
+// runtime; the mutex keeps concurrent logins and token checks consistent.
 type authService struct {
+	mu           sync.RWMutex
 	username     string
 	passwordHash [32]byte
 	sessionKey   [32]byte
 	limiter      *loginLimiter
 }
 
-func newAuthService(username, password string, secret []byte) (*authService, error) {
+// newAuthServiceFromHash builds an auth service around an already-computed
+// password digest, used both for env-provided and database-stored
+// credentials.
+func newAuthServiceFromHash(username string, passwordHash [32]byte, secret []byte) (*authService, error) {
 	if !usernamePattern.MatchString(username) {
 		return nil, fmt.Errorf("webui: username may only contain A-Z a-z 0-9 _ . - (1-64 characters)")
-	}
-	if password == "" {
-		return nil, fmt.Errorf("webui: password must not be empty")
 	}
 	var key [32]byte
 	if len(secret) == 0 {
@@ -54,14 +55,26 @@ func newAuthService(username, password string, secret []byte) (*authService, err
 	}
 	return &authService{
 		username:     username,
-		passwordHash: sha256.Sum256([]byte(password)),
+		passwordHash: passwordHash,
 		sessionKey:   key,
 		limiter:      newLoginLimiter(),
 	}, nil
 }
 
+func newAuthService(username, password string, secret []byte) (*authService, error) {
+	if !usernamePattern.MatchString(username) {
+		return nil, fmt.Errorf("webui: username may only contain A-Z a-z 0-9 _ . - (1-64 characters)")
+	}
+	if password == "" {
+		return nil, fmt.Errorf("webui: password must not be empty")
+	}
+	return newAuthServiceFromHash(username, sha256.Sum256([]byte(password)), secret)
+}
+
 // issueCookie returns the signed token value and its expiry.
 func (a *authService) issueCookie(now time.Time) (string, time.Time) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 	expiry := now.Add(sessionTTL)
 	payload := a.username + "|" + strconv.FormatInt(expiry.Unix(), 10)
 	encoded := base64.RawURLEncoding.EncodeToString([]byte(payload))
@@ -73,6 +86,8 @@ func (a *authService) issueCookie(now time.Time) (string, time.Time) {
 // verifyToken returns the authenticated username, or empty when the value is
 // malformed, tampered, expired, or for a different account.
 func (a *authService) verifyToken(value string, now time.Time) string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 	dot := strings.IndexByte(value, '.')
 	if dot <= 0 || dot == len(value)-1 {
 		return ""
@@ -219,6 +234,64 @@ func (s *Server) sessionCookie(r *http.Request, value string, maxAge int) *http.
 // passwordMatches compares a provided password against the stored hash in
 // constant time.
 func (a *authService) passwordMatches(provided string) bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 	providedHash := sha256.Sum256([]byte(provided))
 	return subtle.ConstantTimeCompare(providedHash[:], a.passwordHash[:]) == 1
+}
+
+// setUsername validates and atomically swaps the login username. The password
+// hash is untouched. Tokens issued for the old username are rejected by
+// verifyToken, so the current session's next request is redirected to login.
+func (a *authService) setUsername(username string) error {
+	if !usernamePattern.MatchString(username) {
+		return fmt.Errorf("webui: username may only contain A-Z a-z 0-9 _ . - (1-64 characters)")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.username = username
+	return nil
+}
+
+// setPassword validates and swaps the stored password hash. The session key is
+// not rotated here; callers should call rotateSessionKey after a password
+// change so every existing session is signed out.
+func (a *authService) setPassword(password string) error {
+	if password == "" {
+		return fmt.Errorf("webui: password must not be empty")
+	}
+	if len(password) > 256 {
+		return fmt.Errorf("webui: password is too long (max 256 characters)")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.passwordHash = sha256.Sum256([]byte(password))
+	return nil
+}
+
+// rotateSessionKey replaces the cookie signing key, invalidating every issued
+// session.
+func (a *authService) rotateSessionKey() error {
+	var key [32]byte
+	if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
+		return fmt.Errorf("webui: generate session key: %w", err)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.sessionKey = key
+	return nil
+}
+
+// currentUsername returns the active login username for responses.
+func (a *authService) currentUsername() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.username
+}
+
+// passwordHashHex returns the active credential digest for persistence.
+func (a *authService) passwordHashHex() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return hex.EncodeToString(a.passwordHash[:])
 }

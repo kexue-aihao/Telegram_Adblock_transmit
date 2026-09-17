@@ -23,6 +23,13 @@ type AuditQuery struct {
 	Page, PageSize int
 }
 
+// PanelCredentials is the persisted WebUI login pair. Only the password hash
+// is stored; the plaintext password never touches the database.
+type PanelCredentials struct {
+	Username     string
+	PasswordHash string // SHA-256 digest in lowercase hex, 64 characters
+}
+
 // AuditPage is the paginated result of an AuditQuery.
 type AuditPage struct {
 	Items    []AuditEntry

@@ -3,6 +3,7 @@ package webui
 import (
 	"context"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,6 +31,10 @@ type Options struct {
 	ChatStore  ports.ChatStore
 	AuditStore ports.PanelAuditStore
 	Refresher  ports.RuleCacheRefresher // *moderation.Service; invalidates the in-process cache
+	// SettingsStore persists username/password changes made from the settings
+	// page. Credentials written there take precedence over the environment
+	// values passed via Username/Password.
+	SettingsStore ports.PanelSettingsStore
 
 	Username      string
 	Password      string
@@ -55,6 +60,9 @@ func New(o Options) (*Server, error) {
 	if o.RuleStore == nil || o.ChatStore == nil || o.AuditStore == nil || o.Refresher == nil {
 		return nil, errors.New("webui: rule store, chat store, audit store and refresher are required")
 	}
+	if o.SettingsStore == nil {
+		return nil, errors.New("webui: settings store is required")
+	}
 	if o.Username == "" || o.Password == "" {
 		return nil, errors.New("webui: username and password are required")
 	}
@@ -65,6 +73,23 @@ func New(o Options) (*Server, error) {
 	auth, err := newAuthService(o.Username, o.Password, o.SessionSecret)
 	if err != nil {
 		return nil, err
+	}
+	if creds, loadErr := o.SettingsStore.GetPanelSettings(context.Background()); loadErr == nil {
+		hashBytes, decodeErr := hex.DecodeString(creds.PasswordHash)
+		if decodeErr == nil && len(hashBytes) == 32 && usernamePattern.MatchString(creds.Username) {
+			var storedHash [32]byte
+			copy(storedHash[:], hashBytes)
+			auth, err = newAuthServiceFromHash(creds.Username, storedHash, o.SessionSecret)
+			if err != nil {
+				logger.Warn("stored panel credentials are invalid, using environment credentials", "error", err)
+			} else {
+				logger.Info("panel credentials loaded from database", "username", creds.Username)
+			}
+		} else {
+			logger.Warn("stored panel credentials are malformed, using environment credentials")
+		}
+	} else if !errors.Is(loadErr, ports.ErrPanelSettingsNotFound) {
+		logger.Warn("unable to read panel settings, using environment credentials", "error", loadErr)
 	}
 	index, err := fs.ReadFile(assetsFS, "assets/index.html")
 	if err != nil {
@@ -132,6 +157,10 @@ func (s *Server) routes() {
 	mux.Handle("GET /api/audit", authed(s.handleListAudit))
 	mux.Handle("GET /api/audit/{id}", authed(s.handleGetAudit))
 	mux.Handle("POST /api/cache/reload", authedCSRF(s.handleCacheReload))
+
+	mux.Handle("GET /api/settings/account", authed(s.handleGetAccount))
+	mux.Handle("POST /api/settings/account", authedCSRF(s.handleUpdateAccount))
+	mux.Handle("POST /api/settings/password", authedCSRF(s.handleUpdatePassword))
 
 	// Fallback for unknown /api paths so API clients get a JSON 404 instead of
 	// the SPA index. One pattern per method keeps them strictly more specific

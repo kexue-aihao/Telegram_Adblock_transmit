@@ -18,7 +18,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, "尝试次数过多，请稍后再试。", "rate_limited")
 		return
 	}
-	if req.Username != s.auth.username || !s.auth.passwordMatches(req.Password) {
+	if req.Username != s.auth.currentUsername() || !s.auth.passwordMatches(req.Password) {
 		time.Sleep(200 * time.Millisecond) // blunt the timing signal for username probing
 		s.auth.limiter.recordFailure(ip, time.Now())
 		writeError(w, http.StatusUnauthorized, "用户名或密码错误。", "invalid_credentials")

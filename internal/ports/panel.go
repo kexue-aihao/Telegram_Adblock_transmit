@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
 )
@@ -27,4 +28,15 @@ type PanelAuditStore interface {
 type RuleCacheRefresher interface {
 	RefreshChatCache(ctx context.Context, chatID int64) error
 	LoadCache(ctx context.Context) error
+}
+
+// ErrPanelSettingsNotFound is returned when no panel_settings row exists yet,
+// in which case the panel falls back to the environment-provided credentials.
+var ErrPanelSettingsNotFound = errors.New("panel settings not found")
+
+// PanelSettingsStore persists the WebUI login credentials changed from the
+// settings page.
+type PanelSettingsStore interface {
+	GetPanelSettings(ctx context.Context) (domain.PanelCredentials, error)
+	SavePanelSettings(ctx context.Context, creds domain.PanelCredentials) error
 }

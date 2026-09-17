@@ -140,9 +140,17 @@ func (s *Service) targetsOtherBot(content string) bool {
 }
 
 // HandleUpdate is the normal entry point for a converted Telegram update.
-// It handles a recognized command and otherwise applies moderation.
+// It answers the public start/help commands in any chat type, handles a
+// recognized management command, and otherwise applies moderation.
 func (s *Service) HandleUpdate(ctx context.Context, message domain.ModerationMessage) (bool, error) {
-	if s.isManagementCommand(ExtractContent(message)) {
+	content := ExtractContent(message)
+	if s.targetsOtherBot(content) {
+		return false, nil
+	}
+	if name, _, ok := ParseCommand(content); ok && isPublicCommand(name) {
+		return false, s.send(ctx, message, HelpText())
+	}
+	if s.isManagementCommand(content) {
 		return s.HandleCommand(ctx, message)
 	}
 	return s.Process(ctx, message)

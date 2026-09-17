@@ -224,6 +224,59 @@ func TestCommandForThisBotIsHandled(t *testing.T) {
 	}
 }
 
+func TestStartAndHelpAnswerAnywhere(t *testing.T) {
+	for _, command := range []string{"/start", "/help", "/START", "/help@MyBot"} {
+		tg := &fakeTelegram{admin: false}
+		svc := NewService(&fakeRules{}, &fakeCache{}, &fakeAudit{}, tg, nil)
+		svc.SetBotUsername("MyBot")
+
+		group := testMessage()
+		group.Text = command
+		if deleted, err := svc.HandleUpdate(context.Background(), group); err != nil || deleted {
+			t.Fatalf("%s in group failed: %v, %v", command, deleted, err)
+		}
+		if len(tg.sends) != 1 {
+			t.Fatalf("%s in group sent %d messages, want 1", command, len(tg.sends))
+		}
+		if got := tg.sends[0].text; got != HelpText() {
+			t.Fatalf("%s reply != HelpText: %d bytes", command, len(got))
+		}
+
+		dm := testMessage()
+		dm.ChatType = "private"
+		dm.Text = command
+		if deleted, err := svc.HandleUpdate(context.Background(), dm); err != nil || deleted {
+			t.Fatalf("%s in private chat failed: %v, %v", command, deleted, err)
+		}
+		if len(tg.sends) != 2 {
+			t.Fatalf("%s in private chat did not reply (sends=%d)", command, len(tg.sends))
+		}
+	}
+}
+
+func TestStartDirectedAtOtherBotIsIgnored(t *testing.T) {
+	tg := &fakeTelegram{}
+	svc := NewService(&fakeRules{}, &fakeCache{}, &fakeAudit{}, tg, nil)
+	svc.SetBotUsername("MyBot")
+	message := testMessage()
+	message.Text = "/start@OtherBot"
+	if deleted, err := svc.HandleUpdate(context.Background(), message); err != nil || deleted {
+		t.Fatalf("start for another bot was handled: %v, %v", deleted, err)
+	}
+	if len(tg.sends) != 0 {
+		t.Fatal("start for another bot produced a reply")
+	}
+}
+
+func TestHelpTextCoversAllManagementCommands(t *testing.T) {
+	text := HelpText()
+	for _, info := range BotMenu {
+		if !strings.Contains(text, "/"+info.Name) {
+			t.Errorf("help text missing /%s", info.Name)
+		}
+	}
+}
+
 func TestChunkLinesSplitsLongUTF8Line(t *testing.T) {
 	input := strings.Repeat("广告", 2500)
 	chunks := chunkLines([]string{input}, messageChunkSize)

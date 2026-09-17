@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/ports"
 )
 
 // TestPanelRepositoryIntegration runs only when TEST_DATABASE_URL points at an
@@ -184,7 +186,30 @@ func TestPanelRepositoryIntegration(t *testing.T) {
 		t.Fatalf("StatsByDay zero-fill failed: %+v", days[0])
 	}
 
+	// Panel settings round-trip: absent row returns a sentinel, saves upsert
+	// the single row, and a second save overwrites the first.
+	settingsRepo := NewPanelSettingsRepository(pool)
+	_, err = settingsRepo.GetPanelSettings(ctx)
+	if !errors.Is(err, ports.ErrPanelSettingsNotFound) {
+		t.Fatalf("GetPanelSettings on empty table = %v, want ErrPanelSettingsNotFound", err)
+	}
+	if err := settingsRepo.SavePanelSettings(ctx, domain.PanelCredentials{Username: "owner", PasswordHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}); err != nil {
+		t.Fatalf("SavePanelSettings (1): %v", err)
+	}
+	if err := settingsRepo.SavePanelSettings(ctx, domain.PanelCredentials{Username: "owner2", PasswordHash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}); err != nil {
+		t.Fatalf("SavePanelSettings (2): %v", err)
+	}
+	creds, err := settingsRepo.GetPanelSettings(ctx)
+	if err != nil {
+		t.Fatalf("GetPanelSettings after save: %v", err)
+	}
+	if creds.Username != "owner2" || creds.PasswordHash != strings.Repeat("b", 64) {
+		t.Fatalf("GetPanelSettings = %+v, want updated owner2", creds)
+	}
+	_, _ = pool.Exec(context.Background(), `DELETE FROM panel_settings WHERE id = 1`)
+
 	// Assertions keep interface drift visible at compile time.
+	var _ ports.PanelSettingsStore = settingsRepo
 	var _ interface {
 		ListAudit(context.Context, domain.AuditQuery) (domain.AuditPage, error)
 		GetAudit(context.Context, int64) (domain.AuditEntry, error)
