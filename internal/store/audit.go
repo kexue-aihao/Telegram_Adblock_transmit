@@ -260,17 +260,16 @@ func (r *AuditRepository) StatsByDay(ctx context.Context, days int, chatID *int6
 
 	byDay := make(map[string]domain.AuditDayStat, days)
 	for rows.Next() {
-		var dateStr string
+		var day time.Time
 		var stat domain.AuditDayStat
-		if err := rows.Scan(&dateStr, &stat.Hits, &stat.Deleted, &stat.Failed); err != nil {
+		// Scan the ::date column into time.Time: pgx refuses to decode the
+		// Date OID into a *string over the binary protocol, which used to make
+		// the trend endpoint 500 as soon as any audit row existed.
+		if err := rows.Scan(&day, &stat.Hits, &stat.Deleted, &stat.Failed); err != nil {
 			return nil, fmt.Errorf("scan panel day stat: %w", err)
 		}
-		day, err := time.Parse("2006-01-02", dateStr)
-		if err != nil {
-			return nil, fmt.Errorf("parse panel day %q: %w", dateStr, err)
-		}
 		stat.Date = day
-		byDay[dateStr] = stat
+		byDay[day.Format("2006-01-02")] = stat
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate panel day stats: %w", err)
