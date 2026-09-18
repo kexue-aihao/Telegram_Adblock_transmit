@@ -3,6 +3,7 @@ package moderation
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -134,24 +135,30 @@ func TestProcessDeletionFailureAuditsWithoutNotice(t *testing.T) {
 	}
 }
 
-func TestProcessIgnoresBotsAndNonGroups(t *testing.T) {
+func TestProcessIgnoresNonGroupsAndModeratesBotAds(t *testing.T) {
 	tg := &fakeTelegram{}
 	audit := &fakeAudit{}
-	cache := &fakeCache{matched: []int64{1}}
+	cache := &fakeCache{}
 	svc := NewService(&fakeRules{}, cache, audit, tg, nil)
+	svc.SetBuiltinFilter(builtin.New(true))
 
 	bot := testMessage()
 	bot.UserIsBot = true
-	if deleted, err := svc.Process(context.Background(), bot); err != nil || deleted {
-		t.Fatalf("bot message was moderated: %v, %v", deleted, err)
+	bot.Text = "@adservicebot 领取 https://t.me/+abc"
+	bot.Entities = []domain.MessageEntityInfo{{Type: "mention", Username: "adservicebot"}}
+	if deleted, err := svc.HandleUpdate(context.Background(), bot); err != nil || !deleted {
+		t.Fatalf("bot advertisement was not moderated: %v, %v", deleted, err)
+	}
+	if len(audit.entries) != 1 || !slices.Contains(audit.entries[0].BuiltinHits, builtin.HitBotMention) {
+		t.Fatalf("external bot mention was not recorded as a builtin hit: %+v", audit.entries)
 	}
 	dm := testMessage()
 	dm.ChatType = "private"
 	if deleted, err := svc.Process(context.Background(), dm); err != nil || deleted {
 		t.Fatalf("private message was moderated: %v, %v", deleted, err)
 	}
-	if len(cache.queries) != 0 || len(tg.deleteCalls) != 0 {
-		t.Fatal("ignored messages must not touch the moderation path")
+	if len(cache.queries) != 0 || len(tg.deleteCalls) != 1 {
+		t.Fatalf("unexpected moderation calls: cache=%v deletes=%v", cache.queries, tg.deleteCalls)
 	}
 }
 

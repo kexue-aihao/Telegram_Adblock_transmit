@@ -206,7 +206,11 @@ func (s *Service) HandleMessage(ctx context.Context, message domain.ModerationMe
 }
 
 func (s *Service) process(ctx context.Context, message domain.ModerationMessage, adminKnown *bool) (bool, error) {
-	if !IsSupportedGroup(message) || message.UserIsBot {
+	// Bot-authored messages still need moderation: a member can mention an
+	// external bot and cause it to post or forward an advertisement in the
+	// group. HandleCommand keeps its separate bot guard so bots cannot invoke
+	// rule-management commands.
+	if !IsSupportedGroup(message) {
 		return false, nil
 	}
 	content := ExtractContent(message)
