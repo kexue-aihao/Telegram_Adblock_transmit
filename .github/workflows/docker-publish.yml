@@ -26,6 +26,20 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+        env:
+          POSTGRES_DB: telegram_adblock_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: integration-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d telegram_adblock_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -40,6 +54,10 @@ jobs:
         run: go test ./...
       - name: Run race detector
         run: go test -race ./...
+      - name: Verify builtin settings with PostgreSQL
+        env:
+          TEST_DATABASE_URL: postgres://postgres:integration-only-password@localhost:5432/telegram_adblock_ci?sslmode=disable
+        run: go test -race ./internal/store -run '^TestBuiltinSettingsRepositoryIntegration$' -count=1 -v
       - name: Run vet
         run: go vet ./...
       - name: Check formatting

@@ -11,6 +11,7 @@ import (
 
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/builtin"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/ports"
 )
 
 type fakeCache struct {
@@ -313,6 +314,50 @@ func TestBuiltinFilterDeletesAndAuditsOnSight(t *testing.T) {
 	}
 	if len(tg.sends) != 1 || tg.sends[0].text != ModerationNotice {
 		t.Fatalf("expected moderation notice, got %+v", tg.sends)
+	}
+}
+
+type fakeBuiltinSettings struct{}
+
+func (*fakeBuiltinSettings) GetBuiltinSettings(context.Context) (domain.BuiltinSettings, error) {
+	return domain.BuiltinSettings{}, ports.ErrBuiltinSettingsNotFound
+}
+func (*fakeBuiltinSettings) SaveBuiltinSettings(context.Context, domain.BuiltinSettings) error {
+	return nil
+}
+
+func TestBuiltinUpdatesAffectModerationWithoutDisablingCustomRules(t *testing.T) {
+	ctx := context.Background()
+	checker, err := builtin.NewManaged(ctx, true, &fakeBuiltinSettings{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache := &fakeCache{}
+	audit := &fakeAudit{}
+	service := NewService(&fakeRules{}, cache, audit, &fakeTelegram{}, nil)
+	service.SetBuiltinFilter(checker)
+	message := testMessage()
+	message.Text = "t.me/+abc"
+	if deleted, err := service.Process(ctx, message); err != nil || !deleted {
+		t.Fatalf("initial detection: %v, %v", deleted, err)
+	}
+	if _, err := checker.Update(ctx, nil, map[string]bool{builtin.HitInviteLinkShort: false}); err != nil {
+		t.Fatal(err)
+	}
+	if deleted, err := service.Process(ctx, message); err != nil || deleted {
+		t.Fatalf("per-rule update not applied: %v, %v", deleted, err)
+	}
+	off := false
+	if _, err := checker.Update(ctx, &off, nil); err != nil {
+		t.Fatal(err)
+	}
+	cache.matched = []int64{42}
+	if deleted, err := service.Process(ctx, message); err != nil || !deleted {
+		t.Fatalf("custom rule affected: %v, %v", deleted, err)
+	}
+	last := audit.entries[len(audit.entries)-1]
+	if !slices.Equal(last.MatchedRuleIDs, []int64{42}) || len(last.BuiltinHits) != 0 {
+		t.Fatalf("wrong audit attribution: %+v", last)
 	}
 }
 

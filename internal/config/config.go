@@ -31,9 +31,9 @@ type Config struct {
 	// random key is generated at startup, invalidating all sessions on restart.
 	WebUISessionSecret string
 
-	// AdFilterEnabled gates the shipped-in advertising "virus library" that
-	// deletes forwarded ads and @-mentioned external bots in every group. It
-	// defaults to true so protection is on out of the box.
+	// AdFilterEnabled is the initial master switch for the shipped-in filter.
+	// Persisted panel settings take precedence once an administrator saves them.
+	// It defaults to true so protection is on out of the box.
 	AdFilterEnabled bool
 
 	// SpamStrikeLimit is the number of ad hits (per user, per chat, within

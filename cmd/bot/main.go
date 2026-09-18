@@ -57,6 +57,10 @@ func run() error {
 
 	ruleStore := store.NewRuleRepository(pool)
 	auditStore := store.NewAuditRepository(pool)
+	builtinFilter, err := builtin.NewManaged(ctx, cfg.AdFilterEnabled, store.NewBuiltinSettingsRepository(pool))
+	if err != nil {
+		return err
+	}
 	cache := rules.NewMemoryCache()
 	httpClient := &http.Client{Timeout: cfg.TelegramHTTPTimeout}
 	botAPI, err := tgbotapi.NewBotAPIWithClient(cfg.BotToken, cfg.TelegramAPIEndpoint, httpClient)
@@ -66,7 +70,7 @@ func run() error {
 	telegramClient := telegram.NewClientWithAPIEndpoint(botAPI, cfg.TelegramAPIEndpoint)
 	service := moderation.NewService(ruleStore, cache, auditStore, telegramClient, logger)
 	service.SetBotUsername(botAPI.Self.UserName)
-	service.SetBuiltinFilter(builtin.New(cfg.AdFilterEnabled))
+	service.SetBuiltinFilter(builtinFilter)
 	service.SetSpamPolicy(cfg.SpamStrikeLimit, cfg.SpamStrikeWindow)
 	if err := service.LoadCache(ctx); err != nil {
 		return fmt.Errorf("load moderation rules: %w", err)
@@ -84,6 +88,7 @@ func run() error {
 			AuditStore:    auditStore,
 			Refresher:     service,
 			SettingsStore: settingsStore,
+			BuiltinFilter: builtinFilter,
 			Username:      cfg.WebUIUsername,
 			Password:      cfg.WebUIPassword,
 			SessionSecret: []byte(cfg.WebUISessionSecret),

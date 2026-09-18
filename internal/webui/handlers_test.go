@@ -193,7 +193,8 @@ func newTestPanel(t *testing.T, friction error) (*Server, *fakeRuleStore, *fakeP
 	s, err := New(Options{
 		Addr: "127.0.0.1:0", RuleStore: ruleStore, ChatStore: chatStore,
 		AuditStore: audit, Refresher: refresher, SettingsStore: settings,
-		Username: "admin", Password: "hunter2", SessionSecret: []byte("test-secret"),
+		BuiltinFilter: newTestBuiltin(t, &fakeBuiltinSettings{}),
+		Username:      "admin", Password: "hunter2", SessionSecret: []byte("test-secret"),
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	if err != nil {

@@ -7,9 +7,13 @@ package builtin
 
 import (
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/ports"
 )
 
 // Hit identifiers are stable and shown verbatim in the audit log (prefixed
@@ -55,27 +59,37 @@ var (
 
 // Checker applies the built-in filter. It is safe for concurrent use.
 type Checker struct {
-	enabled bool
+	settings atomic.Pointer[domain.BuiltinSettings]
+	updateMu sync.Mutex
+	store    ports.BuiltinSettingsStore
 }
 
 // New creates a checker. The master ADFILTER_ENABLED switch lives here; a
 // disabled checker makes Detect a no-op.
-func New(enabled bool) *Checker { return &Checker{enabled: enabled} }
+func New(enabled bool) *Checker {
+	c := &Checker{}
+	c.settings.Store(&domain.BuiltinSettings{Enabled: enabled})
+	return c
+}
 
 // Enabled reports whether the built-in filter is active.
-func (c *Checker) Enabled() bool { return c != nil && c.enabled }
+func (c *Checker) Enabled() bool { return c != nil && c.Settings().Enabled }
 
 // Detect returns the stable, de-duplicated hit ids this message matches, or
 // nil when the filter is disabled or nothing matched.
 func (c *Checker) Detect(msg domain.ModerationMessage) []string {
-	if !c.Enabled() {
+	if c == nil {
+		return nil
+	}
+	settings := c.Settings()
+	if !settings.Enabled {
 		return nil
 	}
 	content := msg.Content()
 	var hits []string
 	seen := make(map[string]bool)
 	add := func(id string) {
-		if !seen[id] {
+		if !seen[id] && !slices.Contains(settings.DisabledRules, id) {
 			seen[id] = true
 			hits = append(hits, id)
 		}

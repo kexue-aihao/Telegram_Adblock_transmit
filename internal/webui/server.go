@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/builtin"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/ports"
 )
 
@@ -35,6 +36,7 @@ type Options struct {
 	// page. Credentials written there take precedence over the environment
 	// values passed via Username/Password.
 	SettingsStore ports.PanelSettingsStore
+	BuiltinFilter *builtin.Checker
 
 	Username      string
 	Password      string
@@ -156,6 +158,8 @@ func (s *Server) routes() {
 	mux.Handle("DELETE /api/rules/{ruleID}", authedCSRF(s.handleRemoveRule))
 	mux.Handle("GET /api/rules/export", authed(s.handleExportRules))
 	mux.Handle("POST /api/rules/test", authedCSRF(s.handleRuleTest))
+	mux.Handle("GET /api/builtin-rules", authed(s.handleGetBuiltinRules))
+	mux.Handle("PATCH /api/builtin-rules", authedCSRF(s.handleUpdateBuiltinRules))
 
 	mux.Handle("GET /api/audit", authed(s.handleListAudit))
 	mux.Handle("GET /api/audit/{id}", authed(s.handleGetAudit))
