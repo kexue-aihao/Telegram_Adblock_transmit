@@ -44,6 +44,7 @@ type Service struct {
 	logger      *slog.Logger
 	botUsername string
 	builtin     *builtin.Checker
+	profiles    ports.UserProfileReader
 
 	// spamStrikeLimit / spamStrikeWindow implement the "three-strike" ban: a
 	// non-admin user whose messages hit rules (or the built-in filter) that
@@ -75,6 +76,14 @@ func (s *Service) SetBotUsername(username string) {
 func (s *Service) SetBuiltinFilter(filter *builtin.Checker) {
 	if s != nil {
 		s.builtin = filter
+	}
+}
+
+// SetUserProfileReader enables optional bio checks. Configure a bounded,
+// cached reader before polling starts; nil disables all profile requests.
+func (s *Service) SetUserProfileReader(reader ports.UserProfileReader) {
+	if s != nil {
+		s.profiles = reader
 	}
 }
 
@@ -276,7 +285,7 @@ func (s *Service) matchingEntry(ctx context.Context, message domain.ModerationMe
 	}
 	matched := s.cache.Match(message.ChatID, content)
 	if len(matched) == 0 {
-		return nil, nil
+		return s.matchingBioEntry(ctx, message)
 	}
 	return &domain.NewAuditEntry{
 		ChatID: message.ChatID, ChatTitle: message.ChatTitle, MessageThreadID: message.MessageThreadID,

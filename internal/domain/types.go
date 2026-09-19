@@ -100,6 +100,7 @@ type ModerationMessage struct {
 	MessageThreadID *int
 	UserID          *int64
 	UserIsBot       bool
+	SenderChatID    *int64 // Non-nil for channel identities and anonymous administrators.
 	Text            string
 	Caption         string
 	Entities        []MessageEntityInfo

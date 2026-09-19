@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
@@ -49,6 +50,47 @@ func (c *Client) Bot() *tgbotapi.BotAPI {
 }
 
 var _ ports.TelegramClient = (*Client)(nil)
+var _ ports.UserProfileReader = (*Client)(nil)
+
+// GetUserBio always uses the context-aware transport. An explicit endpoint is
+// required so custom Bot API deployments cannot silently fall back to Telegram.
+func (c *Client) GetUserBio(ctx context.Context, userID int64) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if c == nil || c.bot == nil || c.bot.Client == nil {
+		return "", errors.New("telegram profile client is nil")
+	}
+	if userID <= 0 {
+		return "", errors.New("telegram profile user ID must be positive")
+	}
+	response, err := c.makeRequest(ctx, "getChat", url.Values{
+		"chat_id": []string{strconv.FormatInt(userID, 10)},
+	})
+	if err != nil {
+		var apiErr tgbotapi.Error
+		if errors.As(err, &apiErr) && apiErr.Code == 429 {
+			seconds := max(int64(1), int64(apiErr.RetryAfter))
+			// Prevent duration overflow on a malformed upstream response.
+			seconds = min(seconds, (1<<63-1)/int64(time.Second))
+			return "", &ports.ProfileRateLimitError{RetryAfter: time.Duration(seconds) * time.Second}
+		}
+		return "", redactTelegramError(err, c.bot.Token)
+	}
+	var chat struct {
+		ID   int64  `json:"id"`
+		Type string `json:"type"`
+		Bio  string `json:"bio"`
+	}
+	if err := json.Unmarshal(response.Result, &chat); err != nil {
+		// Do not include untrusted response contents in errors.
+		return "", errors.New("invalid Telegram user profile response")
+	}
+	if chat.ID != userID || chat.Type != "private" {
+		return "", errors.New("Telegram user profile identity mismatch")
+	}
+	return chat.Bio, nil
+}
 
 func (c *Client) DeleteMessage(ctx context.Context, chatID int64, messageID int) error {
 	if err := ctx.Err(); err != nil {
@@ -292,6 +334,10 @@ func FromMessage(message *tgbotapi.Message, threadID *int) (domain.ModerationMes
 	// The typed message keeps forward_from/forward_from_chat but not
 	// forward_origin; the raw polling path carries the richer origin.
 	msg.Forward = forwardInfoFrom(nil, message.ForwardFrom, message.ForwardFromChat)
+	if message.SenderChat != nil {
+		id := message.SenderChat.ID
+		msg.SenderChatID = &id
+	}
 	return msg, true
 }
 
@@ -311,6 +357,7 @@ type RawMessage struct {
 	MessageID       int                            `json:"message_id"`
 	MessageThreadID *int                           `json:"message_thread_id,omitempty"`
 	From            *tgbotapi.User                 `json:"from,omitempty"`
+	SenderChat      *tgbotapi.Chat                 `json:"sender_chat,omitempty"`
 	Chat            *tgbotapi.Chat                 `json:"chat"`
 	Text            string                         `json:"text,omitempty"`
 	Caption         string                         `json:"caption,omitempty"`
@@ -495,5 +542,9 @@ func ParseUpdate(data []byte) (domain.ModerationMessage, bool, error) {
 		InlineButtons: inlineButtons(message.ReplyMarkup),
 	}
 	msg.Forward = forwardInfoFrom(message.ForwardOrigin, message.ForwardFrom, message.ForwardFromChat)
+	if message.SenderChat != nil {
+		id := message.SenderChat.ID
+		msg.SenderChatID = &id
+	}
 	return msg, true, nil
 }

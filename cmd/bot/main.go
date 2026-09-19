@@ -19,6 +19,7 @@ import (
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/config"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/moderation"
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/profile"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/retention"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/rules"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/store"
@@ -71,6 +72,10 @@ func run() error {
 	service := moderation.NewService(ruleStore, cache, auditStore, telegramClient, logger)
 	service.SetBotUsername(botAPI.Self.UserName)
 	service.SetBuiltinFilter(builtinFilter)
+	if cfg.BioCheckEnabled {
+		service.SetUserProfileReader(profile.New(telegramClient, logger))
+	}
+	logger.Info("user bio checks configured", "enabled", cfg.BioCheckEnabled)
 	service.SetSpamPolicy(cfg.SpamStrikeLimit, cfg.SpamStrikeWindow)
 	if err := service.LoadCache(ctx); err != nil {
 		return fmt.Errorf("load moderation rules: %w", err)

@@ -35,6 +35,8 @@ type Config struct {
 	// Persisted panel settings take precedence once an administrator saves them.
 	// It defaults to true so protection is on out of the box.
 	AdFilterEnabled bool
+	// BioCheckEnabled opts into profile-assisted checks of solicitation messages.
+	BioCheckEnabled bool
 
 	// SpamStrikeLimit is the number of ad hits (per user, per chat, within
 	// SpamStrikeWindow, built-in or user-rule) that permanently bans the user.
@@ -76,6 +78,10 @@ func Load() (Config, error) {
 		cfg.TelegramHTTPTimeout = timeout
 	}
 	allowInsecureHTTP, err := parseBoolEnv("TELEGRAM_ALLOW_INSECURE_HTTP")
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.BioCheckEnabled, err = parseBoolEnv("BIO_CHECK_ENABLED")
 	if err != nil {
 		return Config{}, err
 	}

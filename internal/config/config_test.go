@@ -5,6 +5,25 @@ import (
 	"time"
 )
 
+func TestBioCheckOptIn(t *testing.T) {
+	t.Setenv("BOT_TOKEN", "token")
+	t.Setenv("DATABASE_URL", "postgres://localhost/db")
+	for _, tc := range []struct {
+		value            string
+		enabled, invalid bool
+	}{
+		{"", false, false}, {"false", false, false}, {"true", true, false}, {"typo", false, true},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Setenv("BIO_CHECK_ENABLED", tc.value)
+			cfg, err := Load()
+			if (err != nil) != tc.invalid || cfg.BioCheckEnabled != tc.enabled {
+				t.Fatalf("BIO_CHECK_ENABLED=%q: enabled %v, error %v", tc.value, cfg.BioCheckEnabled, err)
+			}
+		})
+	}
+}
+
 func TestLoadUsesOfficialTelegramEndpointByDefault(t *testing.T) {
 	t.Setenv("BOT_TOKEN", "token")
 	t.Setenv("DATABASE_URL", "postgres://localhost/db")

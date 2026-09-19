@@ -11,7 +11,8 @@
 - 广告规则全局共享，处罚计次按群组和用户隔离。
 - 检查新消息和编辑消息的 `text`、媒体 `caption`、隐藏链接以及内联按钮的文字和链接。
 - 命中规则后删除消息，并记录删除成功或失败的审计记录。
-- 内置广告库 2.0（默认开启）：15 项离线组合检测，重点识别洗钱洗资、跑分资金通道、催情迷情药品交易，同时覆盖博彩、诈骗招募、账号和隐私数据交易等广告。支持精选繁体、零宽字符、插符号等变体；领域词必须结合交易或招揽证据，邀请链接、短链、机器人和频道转发也需推广证据才删除。面板支持分类、总开关、逐项启停和无副作用的文本测试；审计保存库版本与简短命中原因。详细条件和能力边界见[内置广告库管理](docs/builtin-management.md)。
+- 内置广告库 2.1（默认开启）：15 项离线组合检测，重点识别洗钱洗资、跑分资金通道、催情迷情药品交易，同时覆盖博彩、诈骗招募、账号和隐私数据交易等广告。支持精选繁体、零宽字符、插符号等变体；领域词必须结合交易或招揽证据，邀请链接、短链、机器人和频道转发也需推广证据才删除。面板支持分类、总开关、逐项启停和无副作用的文本测试；审计保存库版本与简短命中原因。详细条件和能力边界见[内置广告库管理](docs/builtin-management.md)。
+- 简介辅助检测（默认关闭）：开启 `BIO_CHECK_ENABLED=true` 后，对“看我主页”“点我头像”等主动引流消息尝试查询发送者简介；简介独立命中内置广告规则才删消息并计次。读取失败时跳过，审计标明“证据来源：用户简介”。
 - 规则全局共享：任何群添加/修改的规则对所有群组即时生效（不再按群隔离）。面板「规则管理」页可一键导出全部规则为 JSON 备份。
 - 广告三次封禁：同一用户在同一群组 24 小时内有 3 条不同消息命中广告（自定义规则和内置库均计入），自动永久封禁并踢出。同一消息编辑或重复投递在窗口内最多计一次；阈值由 `SPAM_STRIKE_LIMIT`/`SPAM_STRIKE_WINDOW` 调整。
 - 在 Forum Topics 群组中沿用原消息的 `message_thread_id` 发送提示。
@@ -22,7 +23,7 @@
 ### 不包含的功能
 
 - 面板默认关闭，需要显式启用（见[第 6 节](#6-web-管理面板可选)）。
-- 不扫描历史消息、用户简介、贴纸、文件名、图像/OCR、语音或视频语音，也不合并多条消息判断广告。
+- 不扫描历史消息、贴纸、文件名、图像/OCR、语音或视频语音，也不合并多条消息判断广告。简介检测仅在显式开启后用于主动引流消息，不扫描全部群成员或处理入群申请。
 - 不自动禁言；封禁使用上述可配置的广告计次策略，管理员不会因累计次数被自动封禁。
 - 不自动安装或启动 Telegram Bot API Server，该服务需要单独部署。
 
@@ -76,7 +77,7 @@ ghcr.io/kexue-aihao/telegram-adblock-transmit
 生产环境建议固定版本或不可变摘要，不要长期使用 `latest`：
 
 ~~~env
-BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.8.0
+BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.9.0
 # 或：
 # BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit@sha256:<digest>
 ~~~
@@ -151,7 +152,7 @@ chmod 600 .env
 ~~~env
 BOT_TOKEN=替换为BotFather生成的Token
 POSTGRES_PASSWORD=生成一个足够长的随机密码
-BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.8.0
+BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.9.0
 LOG_LEVEL=INFO
 ~~~
 
@@ -405,10 +406,29 @@ curl -fsS http://127.0.0.1:8080/healthz   # 返回 ok
 | `WEBUI_PASSWORD` | 无 | 面板启用时必需 | 面板登录密码，请使用长随机值 |
 | `WEBUI_SESSION_SECRET` | 无 | 否 | 会话签名密钥；固定后重启不登出，不设则每次重启需重新登录 |
 | `ADFILTER_ENABLED` | `true` | 否 | 内置广告库初始总开关；面板保存的数据库配置优先，关闭内置库不影响自定义规则 |
+| `BIO_CHECK_ENABLED` | `false` | 否 | 简介辅助检测；还需内置库处于开启状态，遵循逐项开关；修改后重新创建 bot 容器 |
 | `SPAM_STRIKE_LIMIT` | `3` | 否 | 同用户同群在窗口内命中广告次数达到该值即永久封禁踢出；<1 代表关闭 |
 | `SPAM_STRIKE_WINDOW` | `24h` | 否 | 封禁计数的滚动时间窗口 |
 
 端点安全规则：HTTPS 默认允许；HTTP 必须设置 `TELEGRAM_ALLOW_INSECURE_HTTP=true`，并且主机只能是回环地址、私网 IP、`localhost`、`host.docker.internal`、`gateway.docker.internal` 或单标签 Docker 服务名。
+
+### 启用简介辅助检测
+
+在 `.env` 中设置 `BIO_CHECK_ENABLED=true`，确认面板中的内置库总开关及所需检测项已开启，然后重新创建 bot 容器（仅 `restart` 不会应用新的环境变量）：
+
+~~~bash
+docker compose -f docker-compose.pull.yml up -d --force-recreate bot
+~~~
+
+从源码构建的部署使用 `docker compose up -d --build bot`。1Panel 用户在编排中同步新增的环境变量并重新创建服务。直接运行 Go 程序时设置进程环境变量后重启。
+
+先检查正文的内置库及自定义规则，未命中且正文或媒体说明包含本人资料引流时才查询简介。匿名管理员、频道身份、机器人和转发内容不参与简介辅助判断；引用、否定和反诈提醒不作为主动引流。普通网址、频道链接或正常发言不会仅因存在简介而被删除。
+
+简介通过 Bot API `getChat(user_id)` 获取，接口可访问性及可选的 `bio` 字段决定覆盖范围，**不能保证读到所有群成员的简介**。每次查询最多 2 秒，全局每秒最多启动 1 次，超出配额跳过而不排队；遇到 `429` 遵循 `retry_after` 暂停查询。缓存按用户共享，最多 10,000 项，成功（含空简介）缓存 10 分钟，失败缓存 1 分钟。因此简介修改后可能最多延迟约 10 分钟被看到；缓存中的简介每次仍使用最新规则判断。
+
+审计保存原消息摘要、规则版本和“消息主动引流／证据来源：用户简介”标签，不保存完整简介。正常日志记录启用状态及命中事件；临时使用 `LOG_LEVEL=DEBUG` 可观察查询的 `available`、`empty`、`unavailable`、`rate_limited`、`server_rate_limited` 状态，日志不输出完整简介。
+
+建议先在测试部署启用，使用可读取简介的测试账号检查组合命中、普通简介不命中，以及无法读取简介时继续处理消息。需要停用时设置 `BIO_CHECK_ENABLED=false` 并重新创建 bot 容器；详细判定说明见[内置广告库管理](docs/builtin-management.md)。
 
 ## 8. 升级、回滚和备份
 
@@ -416,7 +436,7 @@ curl -fsS http://127.0.0.1:8080/healthz   # 返回 ok
 
 1. 在 1Panel 中备份 `postgres_data` 卷，并保存 `.env` 的加密副本。
 2. 可选项：如果你计划使用 Web 面板，先在 `.env` 设置 `WEBUI_ADDR`、`WEBUI_USERNAME`、`WEBUI_PASSWORD`（面板默认关闭，不设置不影响升级；启用后缺凭据会导致启动校验失败）。
-3. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.8.0`。
+3. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.9.0`。
 4. 在编排详情中执行拉取镜像并重新创建/启动服务。
 5. 查看 PostgreSQL 健康状态和 bot 日志，确认 bot 没有反复重启。
 

@@ -16,7 +16,7 @@ func TestAuditPreservesBuiltinExplanationSnapshot(t *testing.T) {
 	s.options.BuiltinFilter = nil
 	details := &domain.BuiltinDetails{
 		LibraryVersion: "previous-version",
-		Hits:           []domain.BuiltinHit{{ID: "retired_detector", Name: "当时的检测名称", Category: "历史分类", Evidence: []string{"交易招揽", "联系方式"}}},
+		Hits:           []domain.BuiltinHit{{ID: "retired_detector", Name: "当时的检测名称", Category: "历史分类", Evidence: []string{"交易招揽", "联系方式", "消息主动引流", "证据来源：用户简介"}}},
 	}
 	audit.entries[0].BuiltinHits = []string{"retired_detector"}
 	audit.entries[0].BuiltinDetails = details
