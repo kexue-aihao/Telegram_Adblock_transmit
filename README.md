@@ -77,7 +77,7 @@ ghcr.io/kexue-aihao/telegram-adblock-transmit
 生产环境建议固定版本或不可变摘要，不要长期使用 `latest`：
 
 ~~~env
-BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.9.0
+BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.9.1
 # 或：
 # BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit@sha256:<digest>
 ~~~
@@ -90,13 +90,13 @@ BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.9.0
 
 ### 第一步：一键部署（推荐）
 
-在服务器终端或 1Panel「终端」中执行下面这一行命令，脚本会自动完成部署目录创建、Compose 与 `.env` 模板下载、环境变量引导、镜像拉取和容器启动：
+在服务器终端或 1Panel「终端」中执行下面这一行命令。脚本自动识别部署目录中的本项目服务：首次运行执行安装，已有部署则保留配置并升级到 GitHub 最新正式版，不会一直停留在 `.env` 中记录的旧官方镜像版本：
 
 ~~~bash
 bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/scripts/deploy.sh)
 ~~~
 
-脚本会依次询问 `BOT_TOKEN`、数据库密码（直接回车自动生成随机密码）以及是否启用 Web 管理面板（需要面板时输入 `y`，再设置面板用户名和密码）。也可以全部用环境变量跳过交互，实现全自动部署：
+首次安装会依次询问 `BOT_TOKEN`、数据库密码（直接回车自动生成随机密码）以及是否启用 Web 管理面板（需要面板时输入 `y`，再设置面板用户名和密码）。升级时沿用原凭据、面板开关和监听地址，不再重复询问已配置项。也可以用环境变量跳过首次安装的交互：
 
 ~~~bash
 cd /opt
@@ -108,7 +108,17 @@ WEBUI_PASSWORD=替换为面板密码 \
 bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/scripts/deploy.sh)
 ~~~
 
-常用可选变量：`DEPLOY_DIR`（部署目录，默认 `/opt/telegram-adblock-transmit`）、`BOT_IMAGE`（镜像版本，默认 `latest`，生产建议固定版本）、`WEBUI_ADDR`（监听地址，默认 `0.0.0.0:8080`）。脚本幂等，重复执行安全；已有的 `.env` 配置不会被覆盖，只补齐缺失项。
+常用可选变量：`DEPLOY_DIR`（默认 `/opt/telegram-adblock-transmit`，已有部署应使用原目录）、`RELEASE_VERSION`（例如 `v1.9.1`）、`BOT_IMAGE`（完整镜像引用，优先级最高）、`WEBUI_ENABLE`（`1` 启用、`0` 关闭；升级时不传则保留）、`WEBUI_ADDR`（首次启用默认 `0.0.0.0:8080`）、`BIO_CHECK_ENABLED`（`true` / `false`，不传则保留；首次默认关闭）。
+
+版本选择顺序：本次显式传入的 `BOT_IMAGE` → `RELEASE_VERSION` → 已配置的自定义镜像 → GitHub 最新正式版。默认运行会将旧的官方版本标签、摘要或 `latest` 替换成最新正式版固定标签，后续手动执行 Compose 仍使用该标签。需要保持某个版本或回滚时，每次运行一键脚本显式传入目标，例如：
+
+~~~bash
+RELEASE_VERSION=v1.9.1 bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/scripts/deploy.sh)
+~~~
+
+脚本检查本目录的 Compose 标签（包含已停止容器）及数据库卷，沿用已有项目名，避免创建另一套数据库。保留 `.env` 中的凭据和其他配置，不删除数据库卷、不执行 `down -v`；只有显式指定的面板/简介选项、镜像目标和项目名会更新。发现旧服务或数据库卷但原 `.env` 丢失时会停止，需先恢复原配置。
+
+部署使用目标版本的 Compose 和环境变量模板；可以通过 `RAW_BASE` 显式指定模板来源。模板下载、配置校验及镜像拉取先在临时目录完成，失败时原文件和服务保持不变。更新前将原 `.env`、Compose 文件和模板备份到部署目录下的 `.backups/时间戳.随机后缀/`（仅当前用户可读）。这是配置备份，不包含 PostgreSQL 数据备份；自定义过网络、端口或挂载的部署应核对目标模板与原文件的差异。启动后检查 PostgreSQL 健康、bot 持续运行及实际镜像是否为目标版本。
 
 脚本启动完成后：如果启用了面板，剩下的唯一工作就是配置 1Panel 反向代理（见[第 6 节](#6-web-管理面板可选)第 6.2 小节）；如果没启用面板，Bot 已经可以直接使用。以下第二步至第六步是等效的手工流程，供自定义部署或排查问题时参考。
 
@@ -152,7 +162,7 @@ chmod 600 .env
 ~~~env
 BOT_TOKEN=替换为BotFather生成的Token
 POSTGRES_PASSWORD=生成一个足够长的随机密码
-BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.9.0
+BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.9.1
 LOG_LEVEL=INFO
 ~~~
 
@@ -436,7 +446,7 @@ docker compose -f docker-compose.pull.yml up -d --force-recreate bot
 
 1. 在 1Panel 中备份 `postgres_data` 卷，并保存 `.env` 的加密副本。
 2. 可选项：如果你计划使用 Web 面板，先在 `.env` 设置 `WEBUI_ADDR`、`WEBUI_USERNAME`、`WEBUI_PASSWORD`（面板默认关闭，不设置不影响升级；启用后缺凭据会导致启动校验失败）。
-3. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.9.0`。
+3. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.9.1`。也可重新运行一键部署脚本，自动选择最新正式版并完成升级。
 4. 在编排详情中执行拉取镜像并重新创建/启动服务。
 5. 查看 PostgreSQL 健康状态和 bot 日志，确认 bot 没有反复重启。
 
