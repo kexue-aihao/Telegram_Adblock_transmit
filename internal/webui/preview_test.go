@@ -55,6 +55,11 @@ func TestWebUIPreview(t *testing.T) {
 	}}
 	audit.entries = nil
 	chats := []int64{-1001234567, -1002345678, -1003456789}
+	samples := []string{
+		"承接洗资业务，联系 @example_agent；催情药现货批发，联系 @example_agent",
+		"催情药现货批发，联系 @example_agent",
+		"社工库个人信息打包出售，联系 @example_agent",
+	}
 	for i := 0; i < 96; i++ {
 		uid := int64(100001 + i)
 		entry := domain.AuditEntry{
@@ -62,6 +67,24 @@ func TestWebUIPreview(t *testing.T) {
 			MatchedRuleIDs: []int64{int64(i%12 + 1)}, BuiltinHits: []string{"ad_bot_mention"},
 			ContentSummary:  "免费领取活动名额，请联系 @adservicebot 了解详情。",
 			DeleteSucceeded: i%7 != 0, OccurredAt: now.AddDate(0, 0, -i/4).Add(-time.Duration(i%4) * time.Minute),
+		}
+		switch i % 5 {
+		case 0, 1, 2:
+			entry.ContentSummary = samples[i%5]
+			analysis := s.options.BuiltinFilter.Analyze(domain.ModerationMessage{Text: entry.ContentSummary})
+			if !analysis.Matched {
+				t.Fatalf("preview advertising sample was not detected: %d", i%5)
+			}
+			entry.BuiltinHits = nil
+			for _, hit := range analysis.Hits {
+				entry.BuiltinHits = append(entry.BuiltinHits, hit.ID)
+			}
+			entry.BuiltinDetails = &domain.BuiltinDetails{LibraryVersion: analysis.LibraryVersion, Hits: analysis.Hits}
+		case 3:
+			// Legacy records have IDs but no explanation snapshot.
+			entry.BuiltinHits = []string{"ad_bot_mention"}
+		case 4:
+			entry.BuiltinHits = []string{"ad_legacy_unknown"}
 		}
 		if i%7 == 0 {
 			entry.DeletionError = "Bad Request: not enough rights to delete messages"

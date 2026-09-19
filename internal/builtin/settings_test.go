@@ -51,22 +51,22 @@ func TestManagedSettingsPersistAndOverrideDefaults(t *testing.T) {
 	if _, err := checker.Update(ctx, &on, map[string]bool{HitInviteLinkShort: false}); err != nil {
 		t.Fatal(err)
 	}
-	if hits := checker.Detect(msg("t.me/+abc")); len(hits) != 0 {
+	if hits := checker.Detect(msg("限时优惠，立即下单 t.me/+abc")); slices.Contains(hits, HitInviteLinkShort) {
 		t.Fatalf("disabled invite hits: %v", hits)
 	}
-	if hits := checker.Detect(msg("bit.ly/abc")); !slices.Contains(hits, HitShortLink) {
+	if hits := checker.Detect(msg("限时优惠，立即下单 bit.ly/abc")); !slices.Contains(hits, HitShortLink) {
 		t.Fatalf("other rule disabled: %v", hits)
 	}
 	restarted, err := NewManaged(ctx, false, store)
 	if err != nil || !restarted.Enabled() {
 		t.Fatalf("restart ignored database override: %v", err)
 	}
-	if hits := restarted.Detect(msg("t.me/+abc")); len(hits) != 0 {
+	if hits := restarted.Detect(msg("限时优惠，立即下单 t.me/+abc")); slices.Contains(hits, HitInviteLinkShort) {
 		t.Fatalf("restart lost per-rule setting: %v", hits)
 	}
 	snapshot := restarted.Settings()
 	snapshot.DisabledRules[0] = HitShortLink
-	if hits := restarted.Detect(msg("t.me/+abc")); len(hits) != 0 {
+	if hits := restarted.Detect(msg("限时优惠，立即下单 t.me/+abc")); slices.Contains(hits, HitInviteLinkShort) {
 		t.Fatal("caller mutated active settings")
 	}
 }
@@ -89,7 +89,7 @@ func TestManagedSettingsFailureDoesNotChangeDetection(t *testing.T) {
 	if _, err := checker.Update(ctx, &off, map[string]bool{HitShortLink: false}); err == nil {
 		t.Fatal("save failure ignored")
 	}
-	if hits := checker.Detect(msg("bit.ly/abc")); !slices.Contains(hits, HitShortLink) {
+	if hits := checker.Detect(msg("限时优惠，立即下单 bit.ly/abc")); !slices.Contains(hits, HitShortLink) {
 		t.Fatalf("failed save changed detection: %v", hits)
 	}
 	if _, err := NewManaged(ctx, true, store); err == nil {
@@ -98,30 +98,19 @@ func TestManagedSettingsFailureDoesNotChangeDetection(t *testing.T) {
 }
 
 func TestManagedSettingsDisableEveryDetector(t *testing.T) {
-	cases := []struct {
-		id      string
-		message domain.ModerationMessage
-	}{
-		{HitInviteLinkShort, msg("t.me/+abc")},
-		{HitInviteLinkJoinchat, msg("t.me/joinchat/abc")},
-		{HitShortLink, msg("bit.ly/abc")},
-		{HitAdKeywordWithLink, msg("免费 https://example.com")},
-		{HitBotMention, msg("免费", withEntities(domain.MessageEntityInfo{Type: "mention", Username: "testbot"}))},
-		{HitChannelForwardWithLink, msg("https://example.com", withForward(domain.ForwardInfo{Type: "channel"}))},
-	}
-	for _, tc := range cases {
-		t.Run(tc.id, func(t *testing.T) {
+	for id, message := range detectorFixtures() {
+		t.Run(id, func(t *testing.T) {
 			checker, err := NewManaged(context.Background(), true, &memorySettings{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !slices.Contains(checker.Detect(tc.message), tc.id) {
+			if !slices.Contains(checker.Detect(message), id) {
 				t.Fatal("fixture does not trigger detector")
 			}
-			if _, err := checker.Update(context.Background(), nil, map[string]bool{tc.id: false}); err != nil {
+			if _, err := checker.Update(context.Background(), nil, map[string]bool{id: false}); err != nil {
 				t.Fatal(err)
 			}
-			if hits := checker.Detect(tc.message); len(hits) != 0 {
+			if hits := checker.Detect(message); slices.Contains(hits, id) {
 				t.Fatalf("disabled detector still hit: %v", hits)
 			}
 		})
@@ -141,14 +130,14 @@ func TestManagedSettingsConcurrentPartialUpdates(t *testing.T) {
 				if _, err := checker.Update(context.Background(), nil, map[string]bool{info.ID: false}); err != nil {
 					t.Error(err)
 				}
-				checker.Detect(msg("免费 t.me/+abc bit.ly/abc"))
+				checker.Detect(msg("限时优惠，立即下单 t.me/+abc bit.ly/abc"))
 				checker.Status()
 			}
 		})
 	}
 	wg.Wait()
 	saved, _ := store.GetBuiltinSettings(context.Background())
-	if len(saved.DisabledRules) != 6 || !slices.Equal(saved.DisabledRules, checker.Settings().DisabledRules) {
+	if len(saved.DisabledRules) != len(Catalog()) || !slices.Equal(saved.DisabledRules, checker.Settings().DisabledRules) {
 		t.Fatalf("lost concurrent update or cache/store mismatch: %+v", saved)
 	}
 }

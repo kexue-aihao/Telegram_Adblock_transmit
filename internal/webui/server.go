@@ -160,6 +160,7 @@ func (s *Server) routes() {
 	mux.Handle("POST /api/rules/test", authedCSRF(s.handleRuleTest))
 	mux.Handle("GET /api/builtin-rules", authed(s.handleGetBuiltinRules))
 	mux.Handle("PATCH /api/builtin-rules", authedCSRF(s.handleUpdateBuiltinRules))
+	mux.Handle("POST /api/builtin-rules/test", authedCSRF(s.handleBuiltinTest))
 
 	mux.Handle("GET /api/audit", authed(s.handleListAudit))
 	mux.Handle("GET /api/audit/{id}", authed(s.handleGetAudit))

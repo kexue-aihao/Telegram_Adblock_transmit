@@ -287,6 +287,7 @@ func FromMessage(message *tgbotapi.Message, threadID *int) (domain.ModerationMes
 		Text:            message.Text,
 		Caption:         message.Caption,
 		Entities:        messageEntities(text, entities),
+		InlineButtons:   inlineButtons(message.ReplyMarkup),
 	}
 	// The typed message keeps forward_from/forward_from_chat but not
 	// forward_origin; the raw polling path carries the richer origin.
@@ -307,14 +308,15 @@ type RawUpdate struct {
 }
 
 type RawMessage struct {
-	MessageID       int                      `json:"message_id"`
-	MessageThreadID *int                     `json:"message_thread_id,omitempty"`
-	From            *tgbotapi.User           `json:"from,omitempty"`
-	Chat            *tgbotapi.Chat           `json:"chat"`
-	Text            string                   `json:"text,omitempty"`
-	Caption         string                   `json:"caption,omitempty"`
-	Entities        []tgbotapi.MessageEntity `json:"entities,omitempty"`
-	CaptionEntities []tgbotapi.MessageEntity `json:"caption_entities,omitempty"`
+	MessageID       int                            `json:"message_id"`
+	MessageThreadID *int                           `json:"message_thread_id,omitempty"`
+	From            *tgbotapi.User                 `json:"from,omitempty"`
+	Chat            *tgbotapi.Chat                 `json:"chat"`
+	Text            string                         `json:"text,omitempty"`
+	Caption         string                         `json:"caption,omitempty"`
+	Entities        []tgbotapi.MessageEntity       `json:"entities,omitempty"`
+	CaptionEntities []tgbotapi.MessageEntity       `json:"caption_entities,omitempty"`
+	ReplyMarkup     *tgbotapi.InlineKeyboardMarkup `json:"reply_markup,omitempty"`
 	// forward_origin only exists in the raw payload: the upstream library
 	// version does not model it, so the typed path falls back to
 	// forward_from / forward_from_chat.
@@ -354,43 +356,76 @@ func messageEntities(text string, entities []tgbotapi.MessageEntity) []domain.Me
 	}
 	out := make([]domain.MessageEntityInfo, 0, len(entities))
 	for _, e := range entities {
-		info := domain.MessageEntityInfo{Type: e.Type}
+		span := utf16Slice(text, e.Offset, e.Length)
+		if span == "" {
+			continue
+		}
+		info := domain.MessageEntityInfo{Type: e.Type, Offset: e.Offset, Length: e.Length}
 		switch e.Type {
 		case "mention":
-			info.Username = strings.TrimPrefix(utf16Slice(text, e.Offset, e.Length), "@")
+			info.Username = strings.TrimPrefix(span, "@")
 		case "text_mention":
 			if e.User != nil {
 				info.Username = e.User.UserName
 				info.IsBot = e.User.IsBot
 			}
-		case "url", "text_link":
+		case "url":
 			info.HasURL = true
+			info.URL = span
+		case "text_link":
+			info.HasURL = e.URL != ""
+			info.URL = e.URL
 		}
 		out = append(out, info)
 	}
 	return out
 }
 
-// utf16Slice decodes the UTF-16 code-unit range [offset, offset+length) that
-// Telegram uses for entity offsets into a Go substring.
-func utf16Slice(value string, offset, length int) string {
-	runes := []rune(value)
-	start := utf16OffsetToRune(runes, offset)
-	end := utf16OffsetToRune(runes, offset+length)
-	if start > len(runes) {
-		return ""
+// inlineButtons keeps only the visible label and link target. Callback data
+// describes bot actions and is not part of the message's advertising content.
+func inlineButtons(markup *tgbotapi.InlineKeyboardMarkup) []domain.InlineButtonInfo {
+	if markup == nil {
+		return nil
 	}
-	if end > len(runes) {
-		end = len(runes)
+	var buttons []domain.InlineButtonInfo
+	for _, row := range markup.InlineKeyboard {
+		for _, button := range row {
+			info := domain.InlineButtonInfo{Text: button.Text}
+			if button.URL != nil {
+				info.URL = *button.URL
+			} else if button.LoginURL != nil {
+				info.URL = button.LoginURL.URL
+			}
+			buttons = append(buttons, info)
+		}
 	}
-	return string(runes[start:end])
+	return buttons
 }
 
-func utf16OffsetToRune(runes []rune, target int) int {
+// utf16Slice decodes the UTF-16 code-unit range [offset, offset+length) that
+// Telegram uses for entity offsets into a Go substring. Invalid ranges,
+// including ranges splitting a surrogate pair, are ignored.
+func utf16Slice(value string, offset, length int) string {
+	// UTF-16 units never exceed the UTF-8 byte count; this also prevents an
+	// overflowing offset+length from an invalid payload.
+	if offset < 0 || length <= 0 || offset > len(value) || length > len(value)-offset {
+		return ""
+	}
+	end := offset + length
+	start := -1
 	units := 0
-	for i, r := range runes {
-		if units >= target {
-			return i
+	for i, r := range value {
+		if units == offset {
+			start = i
+		}
+		if units == end {
+			if start < 0 {
+				return ""
+			}
+			return value[start:i]
+		}
+		if units > end {
+			return ""
 		}
 		if r > 0xFFFF {
 			units += 2
@@ -398,7 +433,10 @@ func utf16OffsetToRune(runes []rune, target int) int {
 			units++
 		}
 	}
-	return len(runes)
+	if units == end && start >= 0 {
+		return value[start:]
+	}
+	return ""
 }
 
 // forwardInfoFrom prefers Telegram's forward_origin (raw path) and falls back
@@ -412,7 +450,9 @@ func forwardInfoFrom(origin *rawForwardOrigin, from *tgbotapi.User, fromChat *tg
 		case origin.SenderChat != nil:
 			info.SourceID, info.SourceTitle = origin.SenderChat.ID, origin.SenderChat.Title
 		case origin.SenderUser != nil:
-			info.SourceID, info.SourceTitle = origin.SenderUser.ID, origin.SenderUser.FirstName+" "+origin.SenderUser.LastName
+			info.SourceID, info.SourceTitle = origin.SenderUser.ID, strings.TrimSpace(origin.SenderUser.FirstName+" "+origin.SenderUser.LastName)
+		case origin.Type == "hidden_user":
+			info.SourceTitle = origin.SenderName
 		}
 		return info
 	}
@@ -451,7 +491,8 @@ func ParseUpdate(data []byte) (domain.ModerationMessage, bool, error) {
 		ChatID: message.Chat.ID, ChatTitle: message.Chat.Title, ChatType: message.Chat.Type,
 		MessageID: message.MessageID, MessageThreadID: message.MessageThreadID,
 		UserID: userID, UserIsBot: userIsBot, Text: message.Text, Caption: message.Caption,
-		Entities: messageEntities(text, entities),
+		Entities:      messageEntities(text, entities),
+		InlineButtons: inlineButtons(message.ReplyMarkup),
 	}
 	msg.Forward = forwardInfoFrom(message.ForwardOrigin, message.ForwardFrom, message.ForwardFromChat)
 	return msg, true, nil

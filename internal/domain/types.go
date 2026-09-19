@@ -41,6 +41,7 @@ type AuditEntry struct {
 	MessageID       int
 	MatchedRuleIDs  []int64
 	BuiltinHits     []string
+	BuiltinDetails  *BuiltinDetails
 	ContentSHA256   string
 	ContentSummary  string
 	DeleteSucceeded bool
@@ -56,6 +57,7 @@ type NewAuditEntry struct {
 	MessageID       int
 	MatchedRuleIDs  []int64
 	BuiltinHits     []string
+	BuiltinDetails  *BuiltinDetails
 	Content         string
 	DeleteSucceeded bool
 	DeletionError   string
@@ -69,6 +71,16 @@ type MessageEntityInfo struct {
 	Username string // mentioned @username (without the leading @), if any
 	IsBot    bool   // only known for text_mention entities
 	HasURL   bool   // entity points at a link (url / text_link)
+	URL      string // actual target, resolved before text normalization
+	Offset   int    // original Telegram UTF-16 code-unit offset
+	Length   int    // original Telegram UTF-16 code-unit length
+}
+
+// InlineButtonInfo retains visible button text and its optional link target.
+// Callback data is deliberately not used as advertising content.
+type InlineButtonInfo struct {
+	Text string
+	URL  string
 }
 
 // ForwardInfo describes where a forwarded message originated, used to detect
@@ -91,6 +103,7 @@ type ModerationMessage struct {
 	Text            string
 	Caption         string
 	Entities        []MessageEntityInfo
+	InlineButtons   []InlineButtonInfo
 	Forward         *ForwardInfo
 }
 

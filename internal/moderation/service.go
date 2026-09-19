@@ -171,9 +171,19 @@ func (s *Service) targetsOtherBot(content string) bool {
 func (s *Service) HandleUpdate(ctx context.Context, message domain.ModerationMessage) (bool, error) {
 	content := ExtractContent(message)
 	if s.targetsOtherBot(content) {
-		return false, nil
+		return s.Process(ctx, message)
 	}
 	if name, _, ok := ParseCommand(content); ok && isPublicCommand(name) {
+		entry, err := s.matchingEntry(ctx, message, nil)
+		if err != nil {
+			return false, err
+		}
+		if entry != nil {
+			return s.enforce(ctx, message, *entry)
+		}
+		if message.UserIsBot {
+			return false, nil
+		}
 		return false, s.send(ctx, message, HelpText())
 	}
 	if s.isManagementCommand(content) {
@@ -206,21 +216,27 @@ func (s *Service) HandleMessage(ctx context.Context, message domain.ModerationMe
 }
 
 func (s *Service) process(ctx context.Context, message domain.ModerationMessage, adminKnown *bool) (bool, error) {
-	// Bot-authored messages still need moderation: a member can mention an
-	// external bot and cause it to post or forward an advertisement in the
-	// group. HandleCommand keeps its separate bot guard so bots cannot invoke
-	// rule-management commands.
+	entry, err := s.matchingEntry(ctx, message, adminKnown)
+	if err != nil || entry == nil {
+		return false, err
+	}
+	return s.enforce(ctx, message, *entry)
+}
+
+// matchingEntry evaluates a message once, keeping hit IDs and their details
+// from the same library snapshot. Commands use the match result separately
+// from deletion success so a failed deletion cannot produce a help response.
+func (s *Service) matchingEntry(ctx context.Context, message domain.ModerationMessage, adminKnown *bool) (*domain.NewAuditEntry, error) {
+	// Bot-authored messages delivered by Telegram still need moderation.
+	// HandleCommand separately prevents bots from managing rules.
 	if !IsSupportedGroup(message) {
-		return false, nil
+		return nil, nil
 	}
 	content := ExtractContent(message)
-	if content == "" {
-		return false, nil
+	if content == "" && len(message.InlineButtons) == 0 {
+		return nil, nil
 	}
-	if s.targetsOtherBot(content) {
-		return false, nil
-	}
-	if s.isManagementCommand(content) {
+	if s.isManagementCommand(content) && !message.UserIsBot {
 		admin := false
 		if adminKnown != nil {
 			admin = *adminKnown
@@ -233,36 +249,40 @@ func (s *Service) process(ctx context.Context, message domain.ModerationMessage,
 			}
 		}
 		if admin {
-			return false, nil
+			return nil, nil
 		}
 	}
-	// The built-in ad filter strikes first: forwarded ads and @-mentioned
-	// external bots are deleted the moment they appear, without waiting for an
-	// administrator to define a rule. No admin exemption, matching the per-group
-	// rules below.
+	// The built-in library runs before per-group rules. Ordinary administrator
+	// messages follow the same content policy as other messages.
 	if s.builtin != nil {
-		if hits := s.builtin.Detect(message); len(hits) > 0 {
-			s.logger.Info("built-in ad filter hit", "chat_id", message.ChatID, "message_id", message.MessageID, "hits", hits)
-			return s.enforce(ctx, message, domain.NewAuditEntry{
+		if analysis := s.builtin.Analyze(message); analysis.Matched {
+			hits := analysis.HitIDs()
+			s.logger.Info("built-in ad filter hit", "chat_id", message.ChatID, "message_id", message.MessageID, "hits", hits, "library_version", analysis.LibraryVersion)
+			return &domain.NewAuditEntry{
 				ChatID: message.ChatID, ChatTitle: message.ChatTitle, MessageThreadID: message.MessageThreadID,
 				UserID: message.UserID, MessageID: message.MessageID, BuiltinHits: hits,
-				Content: content,
-			})
+				BuiltinDetails: analysis.Details(), Content: content,
+			}, nil
 		}
 	}
 
+	// Per-group regular expressions retain their original text/caption input;
+	// metadata-only messages must not newly match empty-string patterns.
+	if content == "" {
+		return nil, nil
+	}
 	if s.cache == nil {
-		return false, errors.New("moderation rule cache is nil")
+		return nil, errors.New("moderation rule cache is nil")
 	}
 	matched := s.cache.Match(message.ChatID, content)
 	if len(matched) == 0 {
-		return false, nil
+		return nil, nil
 	}
-	return s.enforce(ctx, message, domain.NewAuditEntry{
+	return &domain.NewAuditEntry{
 		ChatID: message.ChatID, ChatTitle: message.ChatTitle, MessageThreadID: message.MessageThreadID,
 		UserID: message.UserID, MessageID: message.MessageID, MatchedRuleIDs: append([]int64(nil), matched...),
 		Content: content,
-	})
+	}, nil
 }
 
 // enforce performs the shared delete + audit + notice sequence used by both
@@ -340,12 +360,12 @@ func (s *Service) maybeBanSpammer(ctx context.Context, message domain.Moderation
 // receive a permission response and then go through normal moderation, so the
 // command text cannot act as an advertising bypass.
 func (s *Service) HandleCommand(ctx context.Context, message domain.ModerationMessage) (bool, error) {
-	if !IsSupportedGroup(message) || message.UserIsBot {
+	if !IsSupportedGroup(message) {
 		return false, nil
 	}
 	content := ExtractContent(message)
-	if s.targetsOtherBot(content) {
-		return false, nil
+	if message.UserIsBot || s.targetsOtherBot(content) {
+		return s.Process(ctx, message)
 	}
 	name, args, ok := ParseCommand(content)
 	if !ok {
@@ -548,9 +568,45 @@ func (s *Service) commandLog(ctx context.Context, message domain.ModerationMessa
 			user = strconv.FormatInt(*entry.UserID, 10)
 		}
 		summary := strings.ReplaceAll(entry.ContentSummary, "\n", " ")
-		lines = append(lines, fmt.Sprintf("#%d %s 规则:%s 用户:%s 内容:%s", entry.ID, result, strings.Join(ruleIDs, ","), user, summary))
+		lines = append(lines, fmt.Sprintf("#%d %s 规则:%s%s 用户:%s 内容:%s", entry.ID, result, strings.Join(ruleIDs, ","), builtinAuditSummary(entry), user, summary))
 	}
 	return false, s.sendChunks(ctx, message, lines)
+}
+
+// builtinAuditSummary uses the stored names and evidence, so library updates
+// do not rewrite historical explanations. Older records still show hit IDs.
+func builtinAuditSummary(entry domain.AuditEntry) string {
+	var hits []string
+	seen := make(map[string]bool)
+	if entry.BuiltinDetails != nil {
+		for _, hit := range entry.BuiltinDetails.Hits {
+			label := hit.Name
+			if label == "" {
+				label = hit.ID
+			}
+			label = truncateString(strings.Join(strings.Fields(label), " "), 100)
+			if len(hit.Evidence) > 0 {
+				reason := strings.Join(strings.Fields(strings.Join(hit.Evidence, "、")), " ")
+				label += "（" + truncateString(reason, 180) + "）"
+			}
+			hits = append(hits, label)
+			seen[hit.ID] = true
+		}
+	}
+	for _, id := range entry.BuiltinHits {
+		if !seen[id] {
+			hits = append(hits, id)
+			seen[id] = true
+		}
+	}
+	if len(hits) == 0 {
+		return ""
+	}
+	summary := " 内置:" + strings.Join(hits, "；")
+	if entry.BuiltinDetails != nil && entry.BuiltinDetails.LibraryVersion != "" {
+		summary += " 库版本:" + entry.BuiltinDetails.LibraryVersion
+	}
+	return summary
 }
 
 func (s *Service) refreshCache(ctx context.Context, chatID int64) error {

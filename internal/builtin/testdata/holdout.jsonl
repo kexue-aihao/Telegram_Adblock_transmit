@@ -1,0 +1,38 @@
+{"id":"h001","family":"service_window_notice","kind":"positive","text":"资金清洗窗口已开放。接单至今晚。","want":["ad_money_laundering"]}
+{"id":"h002","family":"settlement_terms","kind":"positive","text":"黑钱漂白按单结算，货主有意详谈","want":["ad_money_laundering"]}
+{"id":"h003","family":"inventory_followup","kind":"positive","text":"一批听话粉可以出货，货到付款","want":["ad_aphrodisiac_trade"]}
+{"id":"h004","family":"inventory_followup","kind":"positive","text":"GHB in stock，wholesale available","want":["ad_aphrodisiac_trade"]}
+{"id":"h005","family":"settlement_terms","kind":"positive","text":"需要人头账户，按点结算，来单详谈","want":["ad_money_mule"]}
+{"id":"h006","family":"platform_terms","kind":"positive","text":"代收代付平台招代理：收款流水日结，按流水提成","want":["ad_money_mule"]}
+{"id":"h007","family":"platform_terms","kind":"positive","text":"六合彩充值有返水，咨询代理","want":["ad_gambling"]}
+{"id":"h008","family":"allocated_slots","kind":"positive","text":"投资翻倍套餐开放名额，私信了解","want":["ad_scam_investment"]}
+{"id":"h009","family":"allocated_slots","kind":"positive","text":"境外园区客服岗位，高额返佣，招聘中","want":["ad_scam_investment"]}
+{"id":"h010","family":"fulfilment_notice","kind":"positive","text":"现可供货伪造证件，按单发货","want":["ad_illicit_goods"]}
+{"id":"h011","family":"fulfilment_notice","kind":"positive","text":"验证码代收全年接单","want":["ad_identity_trade"]}
+{"id":"h012","family":"bespoke_service","kind":"positive","text":"钓鱼页面定制服务接单","want":["ad_personal_data_trade"]}
+{"id":"h013","family":"bespoke_service","kind":"positive","text":"查开房记录业务可办理，私信咨询","want":["ad_personal_data_trade"]}
+{"id":"h014","family":"rate_card","kind":"positive","text":"同城约炮服务，包夜价目详谈","want":["ad_sexual_trade"]}
+{"id":"h015","family":"button_storefront","kind":"positive","text":"会员特价，联系客服","button_text":"查看店铺","button_url":"https://telegram.me/+store_sample","want":["ad_invite_link"]}
+{"id":"h016","family":"button_storefront","kind":"positive","button_text":"批发价点击下单","button_url":"https://telegram.dog/joinchat/store_sample","want":["ad_invite_joinchat"]}
+{"id":"h017","family":"seller_hours","kind":"positive","text":"本店长期供货，有意详谈 https://cutt.ly/store_sample","want":["ad_shortlink"]}
+{"id":"h018","family":"seller_hours","kind":"positive","text":"特价服务请私信 @sample_sellerbot","want":["ad_bot_mention"]}
+{"id":"h019","family":"campaign_forward","kind":"positive","text":"限时促销，欢迎购买 https://store.example.invalid","channel_forward":true,"want":["ad_channel_forward_link","ad_keyword_link"]}
+{"id":"h020","family":"institutional_notice","kind":"negative","text":"本机构拒绝一切洗资合作，请勿下单 https://policy.example.invalid","want":[]}
+{"id":"h021","family":"institutional_notice","kind":"negative","text":"学校开展反洗钱宣传活动，欢迎学生报名参加","want":[]}
+{"id":"h022","family":"incident_digest","kind":"negative","text":"检察院通报，被告以高额返佣诱导刷单，请勿参与 https://news.example.invalid","want":[]}
+{"id":"h023","family":"incident_digest","kind":"negative","text":"公安通报，该广告以听话水现货为宣传内容，警方查处了涉案商家","want":[]}
+{"id":"h024","family":"clinical_question","kind":"negative","text":"医生你好，请问催情药中毒后有哪些症状，应当怎样就医","want":[]}
+{"id":"h025","family":"clinical_question","kind":"negative","text":"芬太尼在医学镇痛中的作用和风险，医生进行科普讲解","want":[]}
+{"id":"h026","family":"technical_walkthrough","kind":"negative","text":"这份报告研究社工库泄露事件的风险和防范机制","want":[]}
+{"id":"h027","family":"technical_walkthrough","kind":"negative","text":"硬件视频讲解 GPU 跑分提高的原因，评论区可以交流","want":[]}
+{"id":"h028","family":"rights_and_privacy","kind":"negative","text":"企业不得出售个人信息，员工应当保护客户资料","want":[]}
+{"id":"h029","family":"rights_and_privacy","kind":"negative","text":"隐私政策：我们不销售个人信息 https://privacy.example.invalid","want":[]}
+{"id":"h030","family":"community_schedule","kind":"negative","text":"本周活动的报名入口 https://telegram.me/joinchat/community_sample","want":[]}
+{"id":"h031","family":"community_schedule","kind":"negative","text":"频道转发：气象部门公布本周降雨预测 https://weather.example.invalid","channel_forward":true,"want":[]}
+{"id":"h032","family":"traditional_inventory","kind":"adversarial","text":"迷q水現貨發貨，貨到付款","want":["ad_aphrodisiac_trade"]}
+{"id":"h033","family":"traditional_inventory","kind":"adversarial","text":"洗z資金窗口接單，USDT 結算","want":["ad_money_laundering"]}
+{"id":"h034","family":"caption_catalog","kind":"adversarial","caption":"催q药库存供应，购买咨询","want":["ad_aphrodisiac_trade"]}
+{"id":"h035","family":"quoted_live_override","kind":"adversarial","text":"诈骗话术示例：“洗资”。现已接单，私信洽谈","want":["ad_money_laundering"]}
+{"id":"h036","family":"whole_ad_quotation","kind":"adversarial","text":"「听话水现货供应，立即购买」","want":["ad_aphrodisiac_trade"]}
+{"id":"h037","family":"medical_url_reference","kind":"negative","text":"论文出处 https://journal.example.invalid/papers/ghb-for-sale-risk","want":[]}
+{"id":"h038","family":"latin_benign_suffix","kind":"negative","text":"这是 alphabet 测试，aphrodisiacal 是英语形容词，for sale 是另一个例句","want":[]}

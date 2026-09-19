@@ -28,22 +28,52 @@ func (*fakeCache) Remove(int64)                         {}
 
 type fakeAudit struct {
 	entries   []domain.NewAuditEntry
-	hits      int64
+	records   []domain.AuditEntry
 	hitsSince time.Time
 }
 
 func (f *fakeAudit) Record(_ context.Context, entry domain.NewAuditEntry) error {
 	f.entries = append(f.entries, entry)
+	f.records = append(f.records, domain.AuditEntry{
+		ID: int64(len(f.records) + 1), ChatID: entry.ChatID, ChatTitle: entry.ChatTitle,
+		MessageThreadID: entry.MessageThreadID, UserID: entry.UserID, MessageID: entry.MessageID,
+		MatchedRuleIDs: entry.MatchedRuleIDs, BuiltinHits: entry.BuiltinHits, BuiltinDetails: entry.BuiltinDetails,
+		ContentSummary: entry.Content, DeleteSucceeded: entry.DeleteSucceeded, DeletionError: entry.DeletionError,
+		OccurredAt: time.Now(),
+	})
 	return nil
 }
-func (*fakeAudit) ListRecent(context.Context, int64, int) ([]domain.AuditEntry, error) {
-	return nil, nil
+func (f *fakeAudit) ListRecent(_ context.Context, chatID int64, limit int) ([]domain.AuditEntry, error) {
+	var entries []domain.AuditEntry
+	for i := len(f.records) - 1; i >= 0 && len(entries) < limit; i-- {
+		if f.records[i].ChatID == chatID {
+			entries = append(entries, f.records[i])
+		}
+	}
+	return entries, nil
 }
-func (f *fakeAudit) CountHits(_ context.Context, _, _ int64, since time.Time) (int64, error) {
+func (f *fakeAudit) CountHits(_ context.Context, chatID, userID int64, since time.Time) (int64, error) {
 	f.hitsSince = since
-	return f.hits, nil
+	seen := make(map[int]bool)
+	for _, entry := range f.records {
+		if entry.ChatID == chatID && entry.UserID != nil && *entry.UserID == userID && !entry.OccurredAt.Before(since) {
+			seen[entry.MessageID] = true
+		}
+	}
+	return int64(len(seen)), nil
 }
 func (*fakeAudit) DeleteExpired(context.Context, time.Time) (int64, error) { return 0, nil }
+
+func auditWithPriorHits(message domain.ModerationMessage, count int) *fakeAudit {
+	audit := &fakeAudit{}
+	for i := 0; i < count; i++ {
+		_ = audit.Record(context.Background(), domain.NewAuditEntry{
+			ChatID: message.ChatID, UserID: message.UserID, MessageID: message.MessageID + i + 1,
+			MatchedRuleIDs: []int64{1}, Content: "earlier advertisement", DeleteSucceeded: true,
+		})
+	}
+	return audit
+}
 
 type fakeTelegram struct {
 	admin       bool
@@ -60,8 +90,8 @@ type fakeSend struct {
 	text     string
 }
 
-func (f *fakeTelegram) DeleteMessage(context.Context, int64, int) error {
-	f.deleteCalls = append(f.deleteCalls, 1)
+func (f *fakeTelegram) DeleteMessage(_ context.Context, _ int64, messageID int) error {
+	f.deleteCalls = append(f.deleteCalls, messageID)
 	return f.deleteErr
 }
 func (f *fakeTelegram) SendMessage(_ context.Context, chatID int64, threadID *int, text string) error {
@@ -76,10 +106,13 @@ func (f *fakeTelegram) BanChatMember(_ context.Context, _ int64, userID int64) e
 	return f.banErr
 }
 
-type fakeRules struct{}
+type fakeRules struct {
+	addCalls int
+}
 
 func (*fakeRules) LoadEnabled(context.Context) (map[int64][]domain.Rule, error) { return nil, nil }
-func (*fakeRules) Add(context.Context, domain.NewRule) (domain.Rule, error) {
+func (f *fakeRules) Add(context.Context, domain.NewRule) (domain.Rule, error) {
+	f.addCalls++
 	return domain.Rule{ID: 1, Enabled: true}, nil
 }
 func (*fakeRules) List(context.Context, int64) ([]domain.Rule, error)   { return nil, nil }
@@ -145,7 +178,7 @@ func TestProcessIgnoresNonGroupsAndModeratesBotAds(t *testing.T) {
 
 	bot := testMessage()
 	bot.UserIsBot = true
-	bot.Text = "@adservicebot 领取 https://t.me/+abc"
+	bot.Text = "@adservicebot 限时优惠，立即下单 https://t.me/+abc123"
 	bot.Entities = []domain.MessageEntityInfo{{Type: "mention", Username: "adservicebot"}}
 	if deleted, err := svc.HandleUpdate(context.Background(), bot); err != nil || !deleted {
 		t.Fatalf("bot advertisement was not moderated: %v, %v", deleted, err)
@@ -215,18 +248,18 @@ func TestParseCommand(t *testing.T) {
 	}
 }
 
-func TestCommandForOtherBotIsIgnored(t *testing.T) {
+func TestCommandForOtherBotIsModeratedWithoutExecutingCommand(t *testing.T) {
 	tg := &fakeTelegram{admin: true}
 	cache := &fakeCache{matched: []int64{8}}
 	svc := NewService(&fakeRules{}, cache, &fakeAudit{}, tg, nil)
 	svc.SetBotUsername("MyBot")
 	message := testMessage()
 	message.Text = "/rule_test@OtherBot spam"
-	if deleted, err := svc.HandleUpdate(context.Background(), message); err != nil || deleted {
-		t.Fatalf("command for another bot was handled: %v, %v", deleted, err)
+	if deleted, err := svc.HandleUpdate(context.Background(), message); err != nil || !deleted {
+		t.Fatalf("command for another bot escaped moderation: %v, %v", deleted, err)
 	}
-	if len(cache.queries) != 0 || len(tg.sends) != 0 {
-		t.Fatalf("command for another bot had side effects: cache=%v sends=%v", cache.queries, tg.sends)
+	if !slices.Equal(cache.queries, []string{message.Text}) || len(tg.sends) != 1 || tg.sends[0].text != ModerationNotice {
+		t.Fatalf("command was executed instead of moderated: cache=%v sends=%v", cache.queries, tg.sends)
 	}
 }
 
@@ -297,7 +330,7 @@ func TestBuiltinFilterDeletesAndAuditsOnSight(t *testing.T) {
 	svc.SetBuiltinFilter(builtin.New(true))
 
 	message := testMessage()
-	message.Text = "进群 https://t.me/+abc"
+	message.Text = "限时优惠，立即下单 https://t.me/+abc123"
 	if deleted, err := svc.HandleUpdate(context.Background(), message); err != nil || !deleted {
 		t.Fatalf("builtin filter did not delete: %v, %v", deleted, err)
 	}
@@ -307,6 +340,19 @@ func TestBuiltinFilterDeletesAndAuditsOnSight(t *testing.T) {
 	entry := audit.entries[0]
 	if !entry.DeleteSucceeded || entry.MatchedRuleIDs != nil {
 		t.Fatalf("unexpected audit entry: %+v", entry)
+	}
+	if entry.BuiltinDetails == nil || entry.BuiltinDetails.LibraryVersion == "" {
+		t.Fatalf("builtin details missing from audit: %+v", entry)
+	}
+	detailedIDs := make([]string, 0, len(entry.BuiltinDetails.Hits))
+	for _, hit := range entry.BuiltinDetails.Hits {
+		detailedIDs = append(detailedIDs, hit.ID)
+		if hit.Name == "" || len(hit.Evidence) == 0 {
+			t.Fatalf("builtin explanation missing: %+v", hit)
+		}
+	}
+	if !slices.Equal(detailedIDs, entry.BuiltinHits) {
+		t.Fatalf("audit IDs and details disagree: ids=%v details=%v", entry.BuiltinHits, detailedIDs)
 	}
 	// The built-in filter fires before the per-group rule cache is consulted.
 	if len(cache.queries) != 0 {
@@ -337,11 +383,15 @@ func TestBuiltinUpdatesAffectModerationWithoutDisablingCustomRules(t *testing.T)
 	service := NewService(&fakeRules{}, cache, audit, &fakeTelegram{}, nil)
 	service.SetBuiltinFilter(checker)
 	message := testMessage()
-	message.Text = "t.me/+abc"
+	message.Text = "限时优惠，立即下单 https://t.me/+abc123"
 	if deleted, err := service.Process(ctx, message); err != nil || !deleted {
 		t.Fatalf("initial detection: %v, %v", deleted, err)
 	}
-	if _, err := checker.Update(ctx, nil, map[string]bool{builtin.HitInviteLinkShort: false}); err != nil {
+	updates := make(map[string]bool)
+	for _, id := range audit.entries[0].BuiltinHits {
+		updates[id] = false
+	}
+	if _, err := checker.Update(ctx, nil, updates); err != nil {
 		t.Fatal(err)
 	}
 	if deleted, err := service.Process(ctx, message); err != nil || deleted {
@@ -371,7 +421,7 @@ func TestBuiltinFilterSkipWhenDisabled(t *testing.T) {
 	// With the filter off, the same invite text is judged by the rule cache
 	// (which does not match) and must be left untouched.
 	message := testMessage()
-	message.Text = "进群 https://t.me/+abc"
+	message.Text = "限时优惠，立即下单 https://t.me/+abc123"
 	if deleted, err := svc.HandleUpdate(context.Background(), message); err != nil || deleted {
 		t.Fatalf("disabled builtin filter changed behavior: %v, %v", deleted, err)
 	}
@@ -382,7 +432,7 @@ func TestBuiltinFilterSkipWhenDisabled(t *testing.T) {
 
 func TestThreeStrikePolicyBansNonAdmin(t *testing.T) {
 	tg := &fakeTelegram{admin: false}
-	audit := &fakeAudit{hits: 3}
+	audit := auditWithPriorHits(testMessage(), 2)
 	svc := NewService(&fakeRules{}, &fakeCache{matched: []int64{1}}, audit, tg, nil)
 	svc.SetSpamPolicy(3, 24*time.Hour)
 
@@ -402,7 +452,7 @@ func TestThreeStrikePolicyBansNonAdmin(t *testing.T) {
 func TestThreeStrikePolicySkipsAdminsAndUnderLimit(t *testing.T) {
 	// Three hits by an admin must not trigger a ban.
 	adminTG := &fakeTelegram{admin: true}
-	svc := NewService(&fakeRules{}, &fakeCache{matched: []int64{1}}, &fakeAudit{hits: 3}, adminTG, nil)
+	svc := NewService(&fakeRules{}, &fakeCache{matched: []int64{1}}, auditWithPriorHits(testMessage(), 2), adminTG, nil)
 	svc.SetSpamPolicy(3, 24*time.Hour)
 	if _, err := svc.HandleUpdate(context.Background(), testMessage()); err != nil {
 		t.Fatal(err)
@@ -413,7 +463,7 @@ func TestThreeStrikePolicySkipsAdminsAndUnderLimit(t *testing.T) {
 
 	// Two hits are under the limit and must not trigger a ban.
 	lightTG := &fakeTelegram{admin: false}
-	svc2 := NewService(&fakeRules{}, &fakeCache{matched: []int64{1}}, &fakeAudit{hits: 2}, lightTG, nil)
+	svc2 := NewService(&fakeRules{}, &fakeCache{matched: []int64{1}}, auditWithPriorHits(testMessage(), 1), lightTG, nil)
 	svc2.SetSpamPolicy(3, 24*time.Hour)
 	if _, err := svc2.HandleUpdate(context.Background(), testMessage()); err != nil {
 		t.Fatal(err)

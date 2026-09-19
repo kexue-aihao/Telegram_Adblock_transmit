@@ -13,17 +13,20 @@ import (
 var ErrUnknownRule = errors.New("unknown builtin rule")
 
 type RuleInfo struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Pattern     string `json:"pattern,omitempty"`
-	Enabled     bool   `json:"enabled"`
-	Effective   bool   `json:"effective"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Category    string   `json:"category"`
+	Description string   `json:"description"`
+	Conditions  []string `json:"conditions"`
+	Pattern     string   `json:"pattern,omitempty"`
+	Enabled     bool     `json:"enabled"`
+	Effective   bool     `json:"effective"`
 }
 
 type Status struct {
-	Enabled bool       `json:"enabled"`
-	Rules   []RuleInfo `json:"rules"`
+	Enabled        bool       `json:"enabled"`
+	LibraryVersion string     `json:"library_version"`
+	Rules          []RuleInfo `json:"rules"`
 }
 
 // NewManaged restores overrides even when the WebUI itself is disabled.
@@ -46,6 +49,9 @@ func NewManaged(ctx context.Context, enabled bool, store ports.BuiltinSettingsSt
 }
 
 func (c *Checker) Settings() domain.BuiltinSettings {
+	if c == nil {
+		return domain.BuiltinSettings{}
+	}
 	settings := c.settings.Load()
 	if settings == nil {
 		return domain.BuiltinSettings{}
@@ -53,27 +59,8 @@ func (c *Checker) Settings() domain.BuiltinSettings {
 	return domain.BuiltinSettings{Enabled: settings.Enabled, DisabledRules: slices.Clone(settings.DisabledRules)}
 }
 
-func catalog() []RuleInfo {
-	items := []RuleInfo{
-		{ID: HitInviteLinkShort, Name: "群组邀请链接", Description: "识别 t.me/+ 开头的群组邀请链接。"},
-		{ID: HitInviteLinkJoinchat, Name: "Joinchat 邀请链接", Description: "识别 t.me/joinchat/ 开头的群组邀请链接。"},
-		{ID: HitShortLink, Name: "短链接", Description: "识别 bit.ly、tinyurl.com、t.co 等内置短链接域名。"},
-		{ID: HitAdKeywordWithLink, Name: "广告关键词与链接", Description: "广告关键词后 40 个字符内出现 t.me/ 或 HTTP 链接时命中。"},
-		{ID: HitBotMention, Name: "机器人提及广告", Description: "消息包含机器人提及，并同时包含广告关键词或链接时命中。根据 Telegram 消息实体识别机器人。"},
-		{ID: HitChannelForwardWithLink, Name: "频道转发链接", Description: "消息转发来源为频道，并包含文本链接或 Telegram 链接实体时命中。"},
-	}
-	for i := range items {
-		for _, rule := range database {
-			if rule.id == items[i].ID {
-				items[i].Pattern = rule.pattern.String()
-			}
-		}
-	}
-	return items
-}
-
 func status(settings domain.BuiltinSettings) Status {
-	result := Status{Enabled: settings.Enabled, Rules: catalog()}
+	result := Status{Enabled: settings.Enabled, LibraryVersion: LibraryVersion, Rules: Catalog()}
 	for i := range result.Rules {
 		result.Rules[i].Enabled = !slices.Contains(settings.DisabledRules, result.Rules[i].ID)
 		result.Rules[i].Effective = settings.Enabled && result.Rules[i].Enabled
@@ -89,7 +76,7 @@ func (c *Checker) Update(ctx context.Context, enabled *bool, rules map[string]bo
 	c.updateMu.Lock()
 	defer c.updateMu.Unlock()
 	next := c.Settings()
-	known := catalog()
+	known := Catalog()
 	for id := range rules {
 		if !slices.ContainsFunc(known, func(rule RuleInfo) bool { return rule.ID == id }) {
 			return Status{}, fmt.Errorf("%w: %s", ErrUnknownRule, id)

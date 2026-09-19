@@ -1,14 +1,10 @@
-// Package builtin implements the shipped-in advertising "virus library":
-// curated patterns and message-metadata heuristics that delete ad messages in
-// every group without administrator configuration. Detection is deliberately
-// balanced (see the hit definitions) to keep false positives low while still
-// striking forwarded ads and @-mentioned external bots on sight.
+// Package builtin implements the offline advertising library shipped with the
+// application. A topic alone is never an advertising verdict: detectors require
+// an offer, solicitation or other independent commercial evidence.
 package builtin
 
 import (
-	"regexp"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -16,132 +12,86 @@ import (
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/ports"
 )
 
-// Hit identifiers are stable and shown verbatim in the audit log (prefixed
-// by the panel with an "⚡内置" badge) so operators can see which built-in
-// rule killed a message.
-const (
-	HitInviteLinkShort        = "ad_invite_link"
-	HitInviteLinkJoinchat     = "ad_invite_joinchat"
-	HitShortLink              = "ad_shortlink"
-	HitAdKeywordWithLink      = "ad_keyword_link"
-	HitBotMention             = "ad_bot_mention"
-	HitChannelForwardWithLink = "ad_channel_forward_link"
-)
+const LibraryVersion = "2.0.0"
 
-type regexRule struct {
-	id      string
-	pattern *regexp.Regexp
+// Analysis is also the response used by the non-destructive preview API.
+// Evidence contains fixed labels only, never excerpts or contact information.
+type Analysis struct {
+	Enabled        bool                `json:"enabled"`
+	Matched        bool                `json:"matched"`
+	LibraryVersion string              `json:"library_version"`
+	Hits           []domain.BuiltinHit `json:"hits"`
 }
 
-func rule(id, pattern string) regexRule {
-	return regexRule{id: id, pattern: regexp.MustCompile(pattern)}
+func (a Analysis) HitIDs() []string {
+	if len(a.Hits) == 0 {
+		return nil
+	}
+	ids := make([]string, len(a.Hits))
+	for i, hit := range a.Hits {
+		ids[i] = hit.ID
+	}
+	return ids
 }
 
-// database is the built-in ad-killer virus library. Patterns are compiled
-// once at startup; Go RE2 guarantees linear-time matching. Extend this list
-// to harden the kill coverage without changing the rest of the pipeline.
-var database = []regexRule{
-	rule(HitInviteLinkShort, `(?i)t\.me/\+[a-z0-9_-]{2,64}`),
-	rule(HitInviteLinkJoinchat, `(?i)t\.me/joinchat/[a-z0-9_-]+`),
-	rule(HitShortLink, `(?i)(?:bit\.ly|goo\.gl|tinyurl\.com|rb\.gy|0rz\.tw|t\.co|is\.gd|ow\.ly|shorturl\.at)/[a-z0-9]+`),
-	rule(HitAdKeywordWithLink, `(?i)(领取|返利|红包|秒到|免费|加群|扫码|客服|优惠券|福利|内部|名额|赚钱|日赚|红包群|兼职|彩票|博彩).{0,40}(t\.me/|https?://)`),
+func cloneHits(hits []domain.BuiltinHit) []domain.BuiltinHit {
+	result := slices.Clone(hits)
+	for i := range result {
+		result[i].Evidence = slices.Clone(result[i].Evidence)
+	}
+	return result
 }
 
-// adKeyword is a loose spam-vocabulary signal used to gate the metadata
-// heuristics (bot mention, forwarded ads) so benign mentions of a bot or an
-// ordinary forward stay untouched.
-var adKeyword = regexp.MustCompile(`(?i)(领取|返利|红包|秒到|免费|加群|扫码|客服|优惠券|福利|内部|名额|赚钱|日赚|兼职|彩票|博彩|外快|导师)`)
+func (a Analysis) Details() *domain.BuiltinDetails {
+	if len(a.Hits) == 0 {
+		return nil
+	}
+	return &domain.BuiltinDetails{LibraryVersion: a.LibraryVersion, Hits: cloneHits(a.Hits)}
+}
 
-var (
-	tmeLink  = regexp.MustCompile(`(?i)t\.me/`)
-	httpLink = regexp.MustCompile(`(?i)https?://`)
-)
-
-// Checker applies the built-in filter. It is safe for concurrent use.
+// Checker publishes immutable settings snapshots and is safe for concurrent use.
 type Checker struct {
 	settings atomic.Pointer[domain.BuiltinSettings]
 	updateMu sync.Mutex
 	store    ports.BuiltinSettingsStore
 }
 
-// New creates a checker. The master ADFILTER_ENABLED switch lives here; a
-// disabled checker makes Detect a no-op.
 func New(enabled bool) *Checker {
 	c := &Checker{}
 	c.settings.Store(&domain.BuiltinSettings{Enabled: enabled})
 	return c
 }
 
-// Enabled reports whether the built-in filter is active.
 func (c *Checker) Enabled() bool { return c != nil && c.Settings().Enabled }
 
-// Detect returns the stable, de-duplicated hit ids this message matches, or
-// nil when the filter is disabled or nothing matched.
-func (c *Checker) Detect(msg domain.ModerationMessage) []string {
+// Detect preserves the original interface for existing callers.
+func (c *Checker) Detect(message domain.ModerationMessage) []string {
+	return c.Analyze(message).HitIDs()
+}
+
+// Analyze performs no network or storage operations and never changes message.
+func (c *Checker) Analyze(message domain.ModerationMessage) Analysis {
+	result := Analysis{LibraryVersion: LibraryVersion, Hits: []domain.BuiltinHit{}}
 	if c == nil {
-		return nil
+		return result
 	}
 	settings := c.Settings()
+	result.Enabled = settings.Enabled
 	if !settings.Enabled {
-		return nil
+		return result
 	}
-	content := msg.Content()
-	var hits []string
-	seen := make(map[string]bool)
-	add := func(id string) {
-		if !seen[id] && !slices.Contains(settings.DisabledRules, id) {
-			seen[id] = true
-			hits = append(hits, id)
-		}
-	}
-	for _, r := range database {
-		if r.pattern.MatchString(content) {
-			add(r.id)
-		}
-	}
-	if mentionsBot(msg.Entities) && (hasLink(content, msg.Entities) || adKeyword.MatchString(content)) {
-		add(HitBotMention)
-	}
-	if isChannelForward(msg.Forward) && hasLink(content, msg.Entities) {
-		add(HitChannelForwardWithLink)
-	}
-	return hits
-}
-
-// mentionsBot reports whether the message @-mentions an external bot: a
-// text_mention entity with the bot flag, or a @username that ends in "bot"
-// (the heuristic Telegram bots overwhelmingly use).
-func mentionsBot(entities []domain.MessageEntityInfo) bool {
-	for _, e := range entities {
-		if e.Type == "text_mention" {
-			if e.IsBot {
-				return true
-			}
+	view := buildView(message)
+	for _, detector := range registry {
+		if slices.Contains(settings.DisabledRules, detector.info.ID) {
 			continue
 		}
-		if e.Type == "mention" && strings.HasSuffix(strings.ToLower(e.Username), "bot") {
-			return true
+		if evidence := detector.match(view); len(evidence) > 0 {
+			result.Hits = append(result.Hits, domain.BuiltinHit{
+				ID: detector.info.ID, Name: detector.info.Name,
+				Category: detector.info.Category, Evidence: evidence,
+			})
 		}
 	}
-	return false
-}
-
-// isChannelForward reports whether the message was forwarded from a channel
-// (the most common source of forwarded spam).
-func isChannelForward(forward *domain.ForwardInfo) bool {
-	return forward != nil && forward.Type == "channel"
-}
-
-// hasLink reports whether the message carries any link: an explicit t.me or
-// http(s) URL in the text, or a url / text_link entity.
-func hasLink(content string, entities []domain.MessageEntityInfo) bool {
-	if tmeLink.MatchString(content) || httpLink.MatchString(content) {
-		return true
-	}
-	for _, e := range entities {
-		if e.Type == "url" || e.Type == "text_link" {
-			return true
-		}
-	}
-	return false
+	result.Matched = len(result.Hits) > 0
+	return result
 }

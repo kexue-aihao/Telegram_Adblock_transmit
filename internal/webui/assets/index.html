@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f5f7f7">
+<meta name="theme-color" content="#f3f6f5">
 <title>广告拦截管理面板</title>
 <script src="/assets/theme.js"></script>
-<link rel="icon" href="data:,">
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 <header class="topbar">
   <a class="brand" href="#/dashboard" aria-label="广告拦截管理面板首页">
     <svg class="brand-mark" aria-hidden="true"><use href="/assets/icons.svg#shield-check"/></svg>
-    <span>广告拦截<span class="brand-sub">管理面板</span></span>
+    <span>广告拦截<span class="brand-sub">管理控制台</span></span>
   </a>
   <div class="topbar-actions">
     <span id="account-name" class="account-name"></span>
@@ -31,17 +31,19 @@
 <div class="layout">
   <aside class="sidebar" id="sidebar" hidden>
     <nav class="nav" aria-label="主导航">
+      <span class="nav-indicator" aria-hidden="true"></span>
       <a href="#/dashboard" class="nav-item" data-route="dashboard"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#layout-dashboard"/></svg><span>仪表盘</span></a>
       <a href="#/rules" class="nav-item" data-route="rules"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#list-filter"/></svg><span>规则管理</span></a>
       <a href="#/audit" class="nav-item" data-route="audit"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#scroll-text"/></svg><span>审计日志</span></a>
       <a href="#/settings" class="nav-item" data-route="settings"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#settings"/></svg><span>设置</span></a>
     </nav>
-    <div class="sidebar-note">Telegram Moderation</div>
+    <div class="sidebar-note"><span class="sidebar-caption">专注社区，守护交流</span><span>Telegram Moderation</span></div>
   </aside>
   <main id="view" class="view" tabindex="-1"></main>
 </div>
 <div id="modal-root"></div>
 <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-relevant="additions"></div>
+<script src="/assets/motion.js"></script>
 <script src="/assets/app.js"></script>
 </body>
 </html>

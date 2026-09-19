@@ -25,6 +25,8 @@ type RuleCache interface {
 type AuditStore interface {
 	Record(ctx context.Context, entry domain.NewAuditEntry) error
 	ListRecent(ctx context.Context, chatID int64, limit int) ([]domain.AuditEntry, error)
+	// CountHits counts distinct message IDs per chat/user in the time window;
+	// multiple audit events for edits or redelivery contribute one strike.
 	CountHits(ctx context.Context, chatID, userID int64, since time.Time) (int64, error)
 	DeleteExpired(ctx context.Context, before time.Time) (int64, error)
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/builtin"
@@ -17,6 +18,7 @@ import (
 type fakeBuiltinSettings struct {
 	settings *domain.BuiltinSettings
 	err      error
+	saves    int
 }
 
 func (f *fakeBuiltinSettings) GetBuiltinSettings(context.Context) (domain.BuiltinSettings, error) {
@@ -26,6 +28,7 @@ func (f *fakeBuiltinSettings) GetBuiltinSettings(context.Context) (domain.Builti
 	return *f.settings, nil
 }
 func (f *fakeBuiltinSettings) SaveBuiltinSettings(_ context.Context, settings domain.BuiltinSettings) error {
+	f.saves++
 	if f.err != nil {
 		return f.err
 	}
@@ -51,11 +54,11 @@ func TestBuiltinManagementAPI(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &status); err != nil {
 		t.Fatal(err)
 	}
-	if res.Code != 200 || !status.Enabled || len(status.Rules) != 6 {
+	if res.Code != 200 || !status.Enabled || status.LibraryVersion == "" || len(status.Rules) != len(builtin.Catalog()) {
 		t.Fatalf("catalog: %s", res.Body)
 	}
 	for _, rule := range status.Rules {
-		if !rule.Enabled || !rule.Effective || rule.Description == "" {
+		if !rule.Enabled || !rule.Effective || rule.Description == "" || rule.Category == "" || len(rule.Conditions) == 0 {
 			t.Fatalf("incomplete catalog: %+v", rule)
 		}
 	}
@@ -79,6 +82,105 @@ func TestBuiltinManagementAPI(t *testing.T) {
 	res = authedRequest(t, handler, "PATCH", "/api/builtin-rules", `{"enabled":true}`, true)
 	if res.Code != 500 || s.options.BuiltinFilter.Enabled() {
 		t.Fatalf("failed save changed runtime: %d", res.Code)
+	}
+}
+
+func TestBuiltinTextTestUsesCurrentSettingsWithoutWrites(t *testing.T) {
+	s, rules, audit, refresher, _, handler := newTestPanel(t, nil)
+	store := &fakeBuiltinSettings{}
+	s.options.BuiltinFilter = newTestBuiltin(t, store)
+	request := func(text string) builtin.Analysis {
+		t.Helper()
+		body, err := json.Marshal(map[string]string{"text": text})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res := authedRequest(t, handler, http.MethodPost, "/api/builtin-rules/test", string(body), true)
+		var result builtin.Analysis
+		if res.Code != http.StatusOK || json.Unmarshal(res.Body.Bytes(), &result) != nil {
+			t.Fatalf("test response: %d %s", res.Code, res.Body)
+		}
+		if result.LibraryVersion == "" {
+			t.Fatal("test response omitted library version")
+		}
+		return result
+	}
+	initialRules, initialAudit := len(rules.rules), len(audit.entries)
+	text := "承接洗资业务，联系 @example_agent"
+	result := request(text)
+	if !result.Enabled || !result.Matched || !slices.ContainsFunc(result.Hits, func(hit domain.BuiltinHit) bool {
+		return hit.ID == "ad_money_laundering" && hit.Name != "" && hit.Category != "" && len(hit.Evidence) > 0
+	}) {
+		t.Fatalf("missing categorized detection: %+v", result)
+	}
+	if clean := request("警方提醒防范洗钱风险，医学文章介绍药物安全。"); clean.Matched || len(clean.Hits) != 0 {
+		t.Fatalf("benign discussion matched: %+v", clean)
+	}
+	if store.saves != 0 || len(rules.rules) != initialRules || len(audit.entries) != initialAudit || len(refresher.refreshed) != 0 {
+		t.Fatal("dry run changed settings, rules, audit or cache")
+	}
+	// Disable every item that participated in this sample; unrelated detectors
+	// remain enabled and may still analyze subsequent messages.
+	updates := make(map[string]bool)
+	for _, hit := range result.Hits {
+		updates[hit.ID] = false
+	}
+	if _, err := s.options.BuiltinFilter.Update(context.Background(), nil, updates); err != nil {
+		t.Fatal(err)
+	}
+	if off := request(text); !off.Enabled || off.Matched || len(off.Hits) != 0 {
+		t.Fatalf("disabled detectors participated in dry run: %+v", off)
+	}
+	off := false
+	if _, err := s.options.BuiltinFilter.Update(context.Background(), &off, nil); err != nil {
+		t.Fatal(err)
+	}
+	if result = request(text); result.Enabled || result.Matched || len(result.Hits) != 0 {
+		t.Fatalf("master off was not represented: %+v", result)
+	}
+	if store.saves != 2 || len(audit.entries) != initialAudit {
+		t.Fatal("testing saved configuration or created moderation audit entries")
+	}
+}
+
+func TestBuiltinTextTestValidationAndAuth(t *testing.T) {
+	s, _, _, _, _, handler := newTestPanel(t, nil)
+	for _, body := range []string{"", `{}`, `null`, `{"text":null}`, `{"text":""}`, `{"text":" \t\n　"}`,
+		`{"text":42}`, `{"text":"hello","entities":[]}`, `{"pattern":"x","text":"x"}`} {
+		t.Run(body, func(t *testing.T) {
+			res := authedRequest(t, handler, http.MethodPost, "/api/builtin-rules/test", body, true)
+			if res.Code != http.StatusBadRequest {
+				t.Fatalf("invalid test body accepted: %d %s", res.Code, res.Body)
+			}
+		})
+	}
+	for _, length := range []int{maxBuiltinTestRunes, maxBuiltinTestRunes + 1} {
+		body, err := json.Marshal(map[string]string{"text": strings.Repeat("😀", length)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res := authedRequest(t, handler, http.MethodPost, "/api/builtin-rules/test", string(body), true)
+		want := http.StatusOK
+		if length > maxBuiltinTestRunes {
+			want = http.StatusBadRequest
+		}
+		if res.Code != want {
+			t.Fatalf("Unicode length %d: %d %s", length, res.Code, res.Body)
+		}
+	}
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/api/builtin-rules/test", strings.NewReader(`{"text":"hello"}`)))
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated test: %d", res.Code)
+	}
+	res = authedRequest(t, handler, http.MethodPost, "/api/builtin-rules/test", `{"text":"hello"}`, false)
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("test without CSRF header: %d", res.Code)
+	}
+	s.options.BuiltinFilter = nil
+	res = authedRequest(t, handler, http.MethodPost, "/api/builtin-rules/test", `{"text":"hello"}`, true)
+	if res.Code != http.StatusServiceUnavailable || !strings.Contains(res.Body.String(), "builtin_unavailable") {
+		t.Fatalf("unavailable filter: %d %s", res.Code, res.Body)
 	}
 }
 

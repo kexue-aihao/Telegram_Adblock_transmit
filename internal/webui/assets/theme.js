@@ -7,5 +7,5 @@
     theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
   document.documentElement.dataset.theme = theme;
-  document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#191d20" : "#f5f7f7";
+  document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#111619" : "#f3f6f5";
 })();

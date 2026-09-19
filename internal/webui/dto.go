@@ -109,24 +109,25 @@ type ruleTestResponse struct {
 }
 
 type auditEntryDTO struct {
-	ID              int64     `json:"id"`
-	ChatID          int64     `json:"chat_id"`
-	MessageThreadID *int      `json:"message_thread_id,omitempty"`
-	UserID          *int64    `json:"user_id,omitempty"`
-	MessageID       int       `json:"message_id"`
-	MatchedRuleIDs  []int64   `json:"matched_rule_ids"`
-	BuiltinHits     []string  `json:"builtin_hits"`
-	ContentSummary  string    `json:"content_summary"`
-	DeleteSucceeded bool      `json:"delete_succeeded"`
-	DeletionError   string    `json:"deletion_error,omitempty"`
-	OccurredAt      time.Time `json:"occurred_at"`
+	ID              int64                  `json:"id"`
+	ChatID          int64                  `json:"chat_id"`
+	MessageThreadID *int                   `json:"message_thread_id,omitempty"`
+	UserID          *int64                 `json:"user_id,omitempty"`
+	MessageID       int                    `json:"message_id"`
+	MatchedRuleIDs  []int64                `json:"matched_rule_ids"`
+	BuiltinHits     []string               `json:"builtin_hits"`
+	BuiltinDetails  *domain.BuiltinDetails `json:"builtin_details,omitempty"`
+	ContentSummary  string                 `json:"content_summary"`
+	DeleteSucceeded bool                   `json:"delete_succeeded"`
+	DeletionError   string                 `json:"deletion_error,omitempty"`
+	OccurredAt      time.Time              `json:"occurred_at"`
 }
 
 func toAuditEntryDTO(entry domain.AuditEntry) auditEntryDTO {
 	return auditEntryDTO{
 		ID: entry.ID, ChatID: entry.ChatID, MessageThreadID: entry.MessageThreadID,
 		UserID: entry.UserID, MessageID: entry.MessageID, MatchedRuleIDs: entry.MatchedRuleIDs,
-		BuiltinHits: entry.BuiltinHits, ContentSummary: entry.ContentSummary,
+		BuiltinHits: entry.BuiltinHits, BuiltinDetails: entry.BuiltinDetails, ContentSummary: entry.ContentSummary,
 		DeleteSucceeded: entry.DeleteSucceeded, DeletionError: entry.DeletionError,
 		OccurredAt: entry.OccurredAt.UTC(),
 	}

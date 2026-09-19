@@ -217,6 +217,10 @@ def run(base_url, output, axe_path=None):
         expect(dialog.get_by_role("heading", name="删除失败原因", exact=True)).to_be_visible()
         expect(dialog).to_contain_text("not enough rights")
         expect(dialog).to_contain_text("最多 120 字")
+        audit_record = context.request.get(base_url + "/api/audit/96").json()
+        expect(dialog.locator(".builtin-audit-explanation")).to_contain_text(audit_record["builtin_details"]["library_version"])
+        expect(dialog.locator(".builtin-evidence > li")).to_have_count(len(audit_record["builtin_details"]["hits"]))
+        assert len(audit_record["builtin_details"]["hits"]) >= 2
         expect(dialog.locator("img")).to_have_count(0)
         page.get_by_role("button", name="复制摘要", exact=True).click()
         expect(dialog.locator(".modal-feedback")).to_contain_text("摘要已复制")
@@ -227,6 +231,27 @@ def run(base_url, output, axe_path=None):
         passed("audit pagination, failure filters, safe summary expansion, details and clipboard")
 
         page.get_by_role("button", name="重置", exact=True).click()
+        catalog = context.request.get(base_url + "/api/builtin-rules").json()
+        catalog_names = {rule["id"]: rule["name"] for rule in catalog["rules"]}
+        expect(page.locator('.badge.builtin[title="ad_bot_mention"]').first).to_have_text(catalog_names["ad_bot_mention"])
+        expect(page.locator('.badge.builtin[title="ad_legacy_unknown"]').first).to_have_text("ad_legacy_unknown")
+        page.get_by_role("button", name="查看审计记录 #93", exact=True).click()
+        expect(dialog.locator(".builtin-audit-legacy")).to_contain_text("未保存规则库版本和详细原因")
+        expect(dialog.locator(".builtin-audit-explanation")).to_have_count(0)
+        page.keyboard.press("Escape")
+        # Stored explanations retain their original metadata across catalog updates.
+        snapshot = json.loads(json.dumps(audit_record))
+        snapshot["builtin_details"]["library_version"] = "1.9.0-preview"
+        snapshot["builtin_details"]["hits"][0]["name"] = "旧版检测名称 <img src=x onerror=alert(1)>"
+        snapshot["builtin_details"]["hits"][0]["evidence"] = ["旧版证据标签 <img src=x onerror=alert(1)>"]
+        page.route("**/api/audit/96", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(snapshot)))
+        page.get_by_role("button", name="查看审计记录 #96", exact=True).click()
+        expect(dialog.locator(".builtin-audit-explanation")).to_contain_text("1.9.0-preview")
+        expect(dialog.locator(".builtin-audit-explanation")).to_contain_text("旧版证据标签 <img")
+        expect(dialog.locator("img")).to_have_count(0)
+        page.keyboard.press("Escape")
+        page.unroute("**/api/audit/96")
+        passed("builtin audit snapshots, multi-category reasons, legacy names and unknown ID fallback")
         page.get_by_role("button", name="近 7 天", exact=True).click()
         expect(page.locator("#audit-region .result-count")).to_contain_text("28")
         page.get_by_label("结束日期 (UTC)", exact=True).fill("2000-01-01")
@@ -265,11 +290,19 @@ def run(base_url, output, axe_path=None):
 
         visit("rules", ".rules-table")
         page.get_by_role("link", name="内置广告库", exact=True).click()
-        expect(page.locator(".builtin-rule")).to_have_count(6)
-        expect(page.locator(".result-count")).to_contain_text("当前生效 6 项")
+        catalog = context.request.get(base_url + "/api/builtin-rules").json()
+        rule_count = len(catalog["rules"])
+        expect(page.locator(".builtin-rule")).to_have_count(rule_count)
+        expect(page.locator(".result-count")).to_contain_text(f"当前生效 {rule_count} 项")
+        expect(page.locator("#builtin-version")).to_contain_text(catalog["library_version"])
+        expect(page.locator(".builtin-group")).to_have_count(len({rule["category"] for rule in catalog["rules"]}))
+        assert all(rule["category"] and rule["conditions"] for rule in catalog["rules"])
         audit_accessibility("builtin-light")
         master = page.get_by_role("switch", name="内置防护总开关", exact=True)
-        bot_rule = page.get_by_role("switch", name="启用机器人提及广告", exact=True)
+        bot_rule = page.locator("#builtin-ad_bot_mention")
+        test_text = page.get_by_label("待检测文本", exact=True)
+        test_button = page.get_by_role("button", name="测试文本", exact=True)
+        test_result = page.locator("#builtin-test-result")
         page.route("**/api/builtin-rules", lambda route: route.fulfill(status=503, content_type="application/json",
             body=json.dumps({"error": "模拟配置保存失败"})))
         bot_rule.click()
@@ -277,24 +310,91 @@ def run(base_url, output, axe_path=None):
         expect(bot_rule).to_be_checked()
         page.unroute("**/api/builtin-rules")
         bot_rule.click()
-        expect(page.locator(".result-count")).to_contain_text("当前生效 5 项")
+        expect(page.locator(".result-count")).to_contain_text(f"当前生效 {rule_count - 1} 项")
         page.reload()
         expect(bot_rule).not_to_be_checked()
         master.click()
         expect(page.locator(".result-count")).to_contain_text("当前生效 0 项")
-        expect(page.locator("#builtin-region .notice")).to_contain_text("总开关已关闭")
+        expect(page.locator("#builtin-region > .notice")).to_contain_text("总开关已关闭")
         settings = context.request.get(base_url + "/api/builtin-rules").json()
         assert settings["enabled"] is False
         assert not any(rule["effective"] for rule in settings["rules"])
+        test_text.fill("承接洗资业务，联系 @example_agent")
+        test_button.click()
+        expect(test_result).to_contain_text("本次未执行内置检测")
         master.click()
-        expect(page.locator(".result-count")).to_contain_text("当前生效 5 项")
+        expect(page.locator(".result-count")).to_contain_text(f"当前生效 {rule_count - 1} 项")
+        expect(test_result).to_contain_text("配置已更新，请重新测试")
         bot_rule.click()
-        expect(page.locator(".result-count")).to_contain_text("当前生效 6 项")
-        page.locator(".builtin-rule summary").first.click()
-        expect(page.locator(".builtin-rule details[open] pre")).to_contain_text("t\\.me")
+        expect(page.locator(".result-count")).to_contain_text(f"当前生效 {rule_count} 项")
+        page.locator(".builtin-conditions summary").first.click()
+        expect(page.locator(".builtin-conditions[open] li").first).to_be_visible()
+        assert page.locator(".builtin-conditions[open] li").count() > 0
+        passed("categorized builtin catalog, version, combination conditions, switches and failure rollback")
+
+        audit_total = context.request.get(base_url + "/api/audit").json()["total"]
+        for text, hit_id in [
+            ("承接洗资业务，联系 @example_agent", "ad_money_laundering"),
+            ("催情药现货批发，联系 @example_agent", "ad_aphrodisiac_trade"),
+            ("社工库个人信息打包出售，联系 @example_agent", "ad_personal_data_trade"),
+        ]:
+            test_text.fill(text)
+            test_button.click()
+            expect(test_result).to_contain_text("当前配置会拦截这段文本")
+            expect(test_result.locator(".builtin-evidence")).to_contain_text(hit_id)
+            expect(test_result).not_to_contain_text("@example_agent")
+        for text in ["警方提醒防范洗钱风险。", "医学文章解释催情药广告的风险。", "https://t.me/+group123"]:
+            test_text.fill(text)
+            test_button.click()
+            expect(test_result).to_contain_text("未命中该文本")
+        test_text.fill("😀" * 4096)
+        expect(page.locator("#builtin-test-count")).to_have_text("4096 / 4096 个字符")
+        assert test_text.evaluate("node => node.checkValidity()")
+        test_button.click()
+        expect(test_result).to_contain_text("未命中该文本")
+        test_text.fill("😀" * 4097)
+        assert test_text.evaluate("node => node.validity.customError")
+        test_text.fill("承接洗资业务，联系 @example_agent")
+        money_rule = page.locator("#builtin-ad_money_laundering")
+        money_rule.click()
+        expect(money_rule).not_to_be_checked()
+        test_button.click()
+        expect(test_result).to_contain_text("未命中该文本")
+        money_rule.click()
+        expect(money_rule).to_be_checked()
+        expect(test_result).to_contain_text("请重新测试")
+        test_button.click()
+        expect(test_result).to_contain_text("当前配置会拦截这段文本")
+        page.route("**/api/builtin-rules/test", lambda route: route.fulfill(status=503, content_type="application/json",
+            body=json.dumps({"error": "模拟文本测试失败"})))
+        test_button.click()
+        expect(test_result).to_contain_text("模拟文本测试失败")
+        page.unroute("**/api/builtin-rules/test")
+        test_button.click()
+        expect(test_result).to_contain_text("当前配置会拦截这段文本")
+        page.screenshot(path=str(output / "desktop-builtin-test.png"), full_page=True)
+        audit_accessibility("builtin-text-result")
+        assert context.request.get(base_url + "/api/audit").json()["total"] == audit_total
+        passed("builtin text tests, priority categories, benign contexts, Unicode limits and current settings without audit writes")
+
+        pending_tests = []
+        page.route("**/api/builtin-rules/test", lambda route: pending_tests.append(route))
+        test_button.click()
+        expect(test_result).to_contain_text("正在分析文本")
+        page.wait_for_timeout(50)
+        test_text.fill("新的正常讨论文本")
+        assert pending_tests
+        pending_tests[0].fulfill(status=200, content_type="application/json", body=json.dumps({
+            "enabled": True, "matched": True, "library_version": catalog["library_version"],
+            "hits": audit_record["builtin_details"]["hits"],
+        }))
+        expect(test_button).to_be_enabled()
+        expect(test_result).to_contain_text("文本已修改，请重新测试")
+        expect(test_result.locator(".builtin-evidence")).to_have_count(0)
+        page.unroute("**/api/builtin-rules/test")
+        passed("stale builtin test results discarded after text changes")
         page.get_by_role("link", name="自定义规则", exact=True).click()
         expect(page.locator(".rules-table")).to_be_visible()
-        passed("builtin catalog, failure rollback, saved switches and master/per-rule effective states")
 
         # Check the authenticated shell in both themes at desktop and narrow/mobile sizes.
         expect(page.locator("#toast-region .toast")).to_have_count(0, timeout=10000)

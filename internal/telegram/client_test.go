@@ -155,7 +155,7 @@ func TestFromMessageCapturesEntitiesAndForward(t *testing.T) {
 		Text:      "加 @somespambot https://t.me/xyz",
 		Entities: []tgbotapi.MessageEntity{
 			{Type: "mention", Offset: 2, Length: 12},
-			{Type: "url", Offset: 15, Length: 19},
+			{Type: "url", Offset: 15, Length: len("https://t.me/xyz")},
 		},
 		ForwardFromChat: &tgbotapi.Chat{ID: -100999, Type: "channel", Title: "广告频道"},
 	}

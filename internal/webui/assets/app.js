@@ -28,11 +28,18 @@ function icon(name) {
   return svg;
 }
 function button(label, name, handler, props = {}) {
-  return el("button", { type: "button", class: "btn", onclick: handler, ...props },
+  return el("button", { type: "button", class: "btn", onclick: (event) => {
+    // WebKit does not focus pointer-clicked buttons by default. Keep a reliable
+    // invoker for dialog focus restoration across all supported browsers.
+    event.currentTarget.focus({ preventScroll: true });
+    handler?.(event);
+  }, ...props },
     name ? icon(name) : null, el("span", null, label));
 }
 function iconButton(label, name, handler, props = {}) {
-  return el("button", { type: "button", class: "icon-btn", "aria-label": label, title: label, onclick: handler, ...props }, icon(name));
+  const control = button(label, null, handler, { class: "icon-btn", "aria-label": label, title: label, ...props });
+  control.replaceChildren(icon(name));
+  return control;
 }
 function field(label, control, hint) {
   return el("div", { class: "field" }, el("label", { for: control.id }, label), control,
@@ -44,7 +51,8 @@ function notice(text, kind = "err") {
 function toast(message, kind = "ok") {
   const node = el("div", { class: "toast " + kind }, icon(kind === "ok" ? "check" : "circle-alert"), el("span", null, message));
   (activeModal?.dialog.open ? activeModal.feedback : document.getElementById("toast-region")).append(node);
-  setTimeout(() => node.remove(), kind === "ok" ? 4500 : 9000);
+  panelMotion.reveal(node, 180);
+  setTimeout(() => panelMotion.play(node, [{ opacity: 1 }, { opacity: 0, transform: "translateY(6px)" }], 180, {}, () => node.remove()), kind === "ok" ? 4500 : 9000);
 }
 function feedback(data, message) {
   const warning = data?.warning === "cache_refresh_failed"
@@ -52,20 +60,31 @@ function feedback(data, message) {
     : data?.warning;
   toast(warning || message, warning ? "warn" : "ok");
 }
-function loading(text = "正在加载…") {
-  return el("div", { class: "loading", role: "status" }, el("span", { class: "spinner", "aria-hidden": "true" }), text);
+function loading(text = "正在加载…", shape = "rows") {
+  return el("div", { class: "loading skeleton-" + shape, role: "status" },
+    el("div", { class: "skeleton-shapes", "aria-hidden": "true" }, Array.from({ length: shape === "stats" ? 4 : 3 }, () => el("span", { class: "skeleton-block" }))),
+    el("span", { class: "loading-caption" }, text));
 }
 async function busy(btn, label, work) {
   if (btn.disabled) return;
   const children = [...btn.childNodes];
+  const previousWidth = btn.style.width;
+  const previousLabel = btn.getAttribute("aria-label");
+  const width = btn.offsetWidth;
+  btn.style.width = width + "px";
   btn.disabled = true;
   btn.setAttribute("aria-busy", "true");
-  btn.replaceChildren(el("span", { class: "spinner", "aria-hidden": "true" }), label);
+  btn.setAttribute("aria-label", label);
+  btn.replaceChildren(el("span", { class: "spinner", "aria-hidden": "true" }),
+    btn.classList.contains("icon-btn") ? "" : el("span", { class: "busy-label" }, label));
   try { return await work(); }
   finally {
     btn.disabled = false;
     btn.removeAttribute("aria-busy");
     btn.replaceChildren(...children);
+    btn.style.width = previousWidth;
+    if (previousLabel === null) btn.removeAttribute("aria-label");
+    else btn.setAttribute("aria-label", previousLabel);
   }
 }
 const numberFormat = new Intl.NumberFormat("zh-CN");
@@ -106,12 +125,16 @@ function rememberRoute() {
   if (link) link.href = location.hash;
 }
 
-const state = { authenticated: false, username: "", route: "dashboard", hash: "", chats: [] };
+const state = { authenticated: false, username: "", route: "dashboard", hash: "", chats: [], builtinCatalog: new Map(), builtinCatalogLoaded: false };
 let activeModal = null;
+let pageRequests;
 
 async function api(path, options = {}) {
+  const pageSignal = (!options.method || options.method === "GET") ? pageRequests?.signal : undefined;
+  const signal = options.signal && pageSignal && typeof AbortSignal.any === "function"
+    ? AbortSignal.any([options.signal, pageSignal]) : options.signal || pageSignal;
   const init = { method: options.method || "GET", credentials: "same-origin",
-    headers: { "X-Requested-With": "fetch" }, signal: options.signal };
+    headers: { "X-Requested-With": "fetch" }, signal };
   if (options.body !== undefined) {
     init.headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(options.body);
@@ -139,8 +162,9 @@ async function api(path, options = {}) {
 }
 function renderError(region, err, retry) {
   if (!region.isConnected || err.name === "AbortError") return;
-  empty(region).append(notice(err.message));
-  if (retry) region.append(button("重试", "refresh-cw", retry));
+  region.querySelectorAll(":scope > .request-error").forEach((node) => node.remove());
+  if (region.querySelector(".loading")) empty(region);
+  region.append(el("div", { class: "request-error" }, notice(err.message), retry ? button("重试", "refresh-cw", retry) : null));
 }
 function pageHeader(title, meta, actions = []) {
   return el("header", { class: "page-header" },
@@ -166,7 +190,7 @@ function pagination(page, totalPages, total, onPage) {
 function switchTheme() {
   const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   document.documentElement.dataset.theme = theme;
-  document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#191d20" : "#f5f7f7";
+  document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#111619" : "#f3f6f5";
   try { localStorage.setItem("panel-theme", theme); } catch { /* Keep the current session theme. */ }
   themeLabel();
 }
@@ -176,12 +200,31 @@ function themeLabel() {
   control.setAttribute("aria-label", label);
   control.title = label;
 }
+function moveNavIndicator(animate = true) {
+  const nav = document.querySelector(".nav");
+  const selected = nav.querySelector('[aria-current="page"]');
+  const marker = nav.querySelector(".nav-indicator");
+  if (!selected || document.getElementById("sidebar").hidden) return;
+  // Read all geometry before writing. Only transform changes during the animation.
+  const old = marker.getBoundingClientRect();
+  const target = selected.getBoundingClientRect();
+  const parent = nav.getBoundingClientRect();
+  const ready = marker.dataset.ready === "true";
+  panelMotion.clear(marker);
+  Object.assign(marker.style, { width: target.width + "px", height: target.height + "px", transform: `translate(${target.left - parent.left}px, ${target.top - parent.top}px)` });
+  marker.dataset.ready = "true";
+  if (animate && ready) panelMotion.play(marker, [
+    { transform: `translate(${old.left - parent.left}px, ${old.top - parent.top}px)` },
+    { transform: marker.style.transform },
+  ], 220);
+}
 function navigate() {
-  if (activeModal && !activeModal.close()) {
+  if (activeModal && !activeModal.close(false, true)) {
     history.replaceState(null, "", state.hash || "#/dashboard");
     return;
   }
   if (!state.authenticated) return;
+  const previousRoute = state.route;
   state.route = (location.hash || "#/dashboard").replace(/^#\/?/, "").split("?")[0];
   state.hash = location.hash;
   document.querySelectorAll(".nav-item[data-route]").forEach((item) => {
@@ -189,7 +232,9 @@ function navigate() {
     else item.removeAttribute("aria-current");
   });
   rememberRoute();
-  renderView();
+  moveNavIndicator();
+  if (state.route !== previousRoute) window.scrollTo({ top: 0, behavior: "instant" });
+  renderView(true);
 }
 function renderShell() {
   document.getElementById("sidebar").hidden = !state.authenticated;
@@ -197,17 +242,49 @@ function renderShell() {
   document.getElementById("account-name").textContent = state.authenticated ? state.username : "";
   document.body.classList.toggle("signed-in", state.authenticated);
   if (state.authenticated) navigate();
-  else empty(document.getElementById("view")).append(renderLogin());
+  else {
+    pageRequests?.abort();
+    const root = document.getElementById("view");
+    panelMotion.clear(root);
+    empty(root).append(renderLogin());
+    panelMotion.reveal(root.firstElementChild, 240);
+  }
 }
-function renderView() {
-  // Each navigation owns a detached-on-exit container; late responses cannot replace the next page.
-  const view = el("section", { class: "page" }, loading());
-  empty(document.getElementById("view")).append(view);
+function renderView(transition = false) {
+  const root = document.getElementById("view");
+  const previous = root.querySelector(".page:not(.page-exit)");
+  let snapshot;
+  if (transition && previous && !panelMotion.reduced()) {
+    snapshot = previous.cloneNode(true);
+    snapshot.classList.add("page-exit");
+    snapshot.inert = true;
+    snapshot.setAttribute("aria-hidden", "true");
+    snapshot.removeAttribute("id");
+    snapshot.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+  }
+  // Detach actual controls immediately: their existing isConnected guards remain valid.
+  pageRequests?.abort();
+  pageRequests = new AbortController();
+  panelMotion.clear(root);
+  const view = el("section", { class: "page", tabindex: "-1" }, loading());
+  empty(root).append(view);
+  if (snapshot) {
+    root.append(snapshot);
+    panelMotion.play(snapshot, [{ opacity: .65 }, { opacity: 0 }], 70, {}, () => snapshot.remove());
+  }
   const renderers = { dashboard: renderDashboard, rules: renderRules, builtin: renderBuiltin, audit: renderAudit, settings: renderSettings };
   const titles = { dashboard: "仪表盘", rules: "规则管理", builtin: "内置广告库", audit: "审计日志", settings: "设置" };
   document.title = (titles[state.route] || "页面不存在") + " · 广告拦截管理面板";
-  if (renderers[state.route]) renderers[state.route](view);
+  if (renderers[state.route]) {
+    renderers[state.route](view).then(() => {
+      if (view.isConnected && document.activeElement === view) view.querySelector("h1")?.focus({ preventScroll: true });
+    });
+  }
   else empty(view).append(emptyState("页面不存在", el("a", { href: "#/dashboard", class: "btn" }, "返回仪表盘")));
+  if (transition) {
+    panelMotion.reveal(view, 240);
+    (view.querySelector("h1") || view).focus({ preventScroll: true });
+  }
 }
 function renderLogin() {
   const username = el("input", { id: "login-user", name: "username", autocomplete: "username", required: true, spellcheck: "false" });
@@ -215,7 +292,9 @@ function renderLogin() {
   const errors = el("div", { id: "login-error" });
   const submit = button("登录", null, null, { type: "submit", class: "btn primary block" });
   const form = el("form", { class: "login-form" },
-    el("div", { class: "login-mark" }, icon("shield-check")), el("h1", null, "登录管理面板"),
+    el("div", { class: "login-mark" }, icon("shield-check")),
+    el("p", { class: "eyebrow" }, "TELEGRAM MODERATION"), el("h1", null, "登录管理面板"),
+    el("p", { class: "login-description" }, "让社区交流，回归内容本身。"),
     field("用户名", username), field("密码", password), errors, submit);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -238,6 +317,8 @@ async function doLogout() {
       await api("/api/logout", { method: "POST" });
       state.authenticated = false;
       state.chats = [];
+      state.builtinCatalog.clear();
+      state.builtinCatalogLoaded = false;
       activeModal?.close(true);
       renderShell();
     } catch (err) { toast(err.message, "err"); }
@@ -245,22 +326,31 @@ async function doLogout() {
 }
 
 function openModal(title, subtitle = "") {
-  if (activeModal && !activeModal.close()) return null;
+  if (activeModal && !activeModal.close(false, true)) return null;
   const previousFocus = document.activeElement;
   const content = el("div", { class: "modal-content" });
   const actions = el("div", { class: "modal-actions" });
   const feedbackRegion = el("div", { class: "modal-feedback", role: "status", "aria-live": "polite" });
   const dialog = el("dialog", { class: "modal", "aria-labelledby": "modal-title", tabindex: "-1" });
   const modal = {
-    content, actions, dialog, feedback: feedbackRegion, dirty: () => false, saving: false,
-    close(force = false) {
-      if (!force && (modal.saving || (modal.dirty() && !window.confirm("有未保存的修改，确定放弃吗？")))) return false;
-      document.getElementById("toast-region").append(...feedbackRegion.childNodes);
-      dialog.close();
-      dialog.remove();
-      if (activeModal === modal) activeModal = null;
-      if (previousFocus && previousFocus.isConnected) previousFocus.focus();
-      else document.querySelector(".page h1")?.focus();
+    content, actions, dialog, feedback: feedbackRegion, dirty: () => false, saving: false, closing: false,
+    close(force = false, immediate = false) {
+      if (modal.closing && !force && !immediate) return true;
+      if (!modal.closing && !force && (modal.saving || (modal.dirty() && !window.confirm("有未保存的修改，确定放弃吗？")))) return false;
+      modal.closing = true;
+      dialog.inert = true;
+      const finish = () => {
+        if (!dialog.isConnected) return;
+        document.getElementById("toast-region").append(...feedbackRegion.childNodes);
+        dialog.close();
+        dialog.remove();
+        if (activeModal === modal) activeModal = null;
+        if (previousFocus && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
+        else document.querySelector(".page:not(.page-exit) h1")?.focus({ preventScroll: true });
+      };
+      panelMotion.clear(dialog);
+      if (force || immediate) finish();
+      else panelMotion.play(dialog, [{ opacity: 1, transform: "scale(1)" }, { opacity: 0, transform: "translateY(8px) scale(.98)" }], 160, {}, finish);
       return true;
     },
   };
@@ -290,6 +380,7 @@ function openModal(title, subtitle = "") {
   queueMicrotask(() => {
     if (!dialog.isConnected) return;
     dialog.showModal();
+    panelMotion.play(dialog, [{ opacity: 0, transform: "translateY(12px) scale(.97)" }, { opacity: 1, transform: "translateY(0) scale(1)" }], 240, { easing: "cubic-bezier(0.16, 1.12, 0.3, 1)" });
     const first = matchMedia("(min-width: 720px)").matches ? content.querySelector("input, textarea, button") : null;
     (first || dialog).focus();
   });
@@ -303,8 +394,8 @@ async function renderDashboard(view) {
   const query = routeParams();
   let days = [7, 30, 90].includes(Number(query.get("days"))) ? Number(query.get("days")) : 30;
   const refresh = iconButton("刷新仪表盘", "refresh-cw", () => renderView());
-  const statsRegion = el("div", null, loading("正在加载统计…"));
-  const trendRegion = el("div", null, loading("正在加载趋势…"));
+  const statsRegion = el("div", null, loading("正在加载统计…", "stats"));
+  const trendRegion = el("div", { class: "trend-region" }, loading("正在加载趋势…", "chart"));
   const failures = el("section", { class: "section recent-failures" }, loading("正在加载失败记录…"));
   const choices = el("div", { class: "segmented", "aria-label": "趋势时间范围" },
     [7, 30, 90].map((value) => button(value + " 天", null, () => {
@@ -313,8 +404,8 @@ async function renderDashboard(view) {
       choices.querySelectorAll("button").forEach((btn) => btn.setAttribute("aria-pressed", String(Number(btn.dataset.days) === days)));
       loadTrend();
     }, { "aria-pressed": String(days === value), dataset: { days: value } })));
-  empty(view).append(pageHeader("仪表盘", "按 UTC 日期统计", [refresh]), statsRegion,
-    el("section", { class: "section" }, el("div", { class: "section-heading" }, el("h2", null, "广告命中趋势"), choices), trendRegion), failures);
+  empty(view).append(pageHeader("仪表盘", "社区防护概览 · 按 UTC 日期统计", [refresh]), statsRegion,
+    el("div", { class: "dashboard-grid" }, el("section", { class: "section trend-panel" }, el("div", { class: "section-heading" }, el("h2", null, "广告命中趋势"), choices), trendRegion), failures));
 
   async function loadOverview() {
     try {
@@ -339,6 +430,7 @@ async function renderDashboard(view) {
         el("span", null, "今日删除成功率 ", el("strong", null, processed ? num(Math.round(overview.deleted_today / processed * 1000) / 10) + "%" : "暂无数据"))));
       if (failed) statsRegion.append(el("a", { class: "failure-banner", href: hashURL("audit", { ...todayFilter, success: "false" }) },
         icon("circle-alert"), el("span", null, "今日有 " + num(failed) + " 条消息删除失败"), el("span", { class: "banner-action" }, "查看原因"), icon("chevron-right")));
+      statsRegion.querySelectorAll(".stat").forEach((card, i) => panelMotion.reveal(card, 220, i * 30));
     } catch (err) { renderError(statsRegion, err, loadOverview); }
   }
   let trendRequest = 0;
@@ -347,12 +439,14 @@ async function renderDashboard(view) {
     trendAbort?.abort();
     trendAbort = new AbortController();
     const request = ++trendRequest;
-    empty(trendRegion).append(loading("正在加载趋势…"));
+    trendRegion.setAttribute("aria-busy", "true");
     try {
       const data = await api("/api/dashboard/trend?days=" + days, { signal: trendAbort.signal });
       if (!view.isConnected || request !== trendRequest) return;
       empty(trendRegion).append(renderTrendChart(data || []));
+      panelMotion.reveal(trendRegion);
     } catch (err) { if (request === trendRequest) renderError(trendRegion, err, loadTrend); }
+    finally { if (request === trendRequest) trendRegion.removeAttribute("aria-busy"); }
   }
   async function loadFailures() {
     try {
@@ -471,8 +565,60 @@ async function renderBuiltin(view) {
   const region = el("div", { id: "builtin-region" }, loading("正在加载内置广告库…"));
   const errors = el("div", { id: "builtin-error" });
   const progress = el("div", { class: "result-count", role: "status" });
+  const version = el("p", { class: "hint", id: "builtin-version" });
+  const testText = el("textarea", { id: "builtin-test-text", name: "text", rows: "4", required: true, spellcheck: "false",
+    placeholder: "粘贴一条待检测消息…", "aria-describedby": "builtin-test-hint builtin-test-count" });
+  const testCount = el("p", { id: "builtin-test-count", class: "hint" }, "0 / 4096 个字符");
+  const testResult = el("div", { id: "builtin-test-result", role: "status", "aria-live": "polite" });
+  const testConfig = el("p", { class: "hint", id: "builtin-test-config" });
+  const testButton = button("测试文本", "search", null, { type: "submit", class: "btn primary" });
+  const testForm = el("form", { class: "builtin-test-form" },
+    field("待检测文本", testText), testCount,
+    el("p", { id: "builtin-test-hint", class: "hint" }, "仅测试文本，最多 4096 个字符。转发来源、隐藏链接和消息按钮等 Telegram 元数据未包含在测试中。"),
+    testConfig, el("div", { class: "test-actions" }, testButton), testResult);
+  const testSection = el("section", { class: "section builtin-test", "aria-labelledby": "builtin-test-title" },
+    el("h2", { id: "builtin-test-title" }, "文本测试"),
+    el("p", { class: "hint" }, "按当前生效配置分析，测试内容不会保存，也不会产生删除、审计或封禁操作。"), testForm);
+  let testRevision = 0;
+  let settingsSaving = false;
+  function invalidateTest(message) {
+    testRevision++;
+    if (testResult.childNodes.length) empty(testResult).append(el("p", { class: "hint" }, message));
+  }
+  testText.addEventListener("input", () => {
+    const length = Array.from(testText.value).length;
+    testCount.textContent = length + " / 4096 个字符";
+    testText.setCustomValidity(length > 4096 ? "测试文本最多为 4096 个字符。" : "");
+    testText.removeAttribute("aria-invalid");
+    invalidateTest("文本已修改，请重新测试。");
+  });
+  testForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (settingsSaving || !testForm.reportValidity()) return;
+    if (!testText.value.trim()) {
+      testText.setAttribute("aria-invalid", "true");
+      empty(testResult).append(notice("请输入待检测文本。"));
+      testText.focus();
+      return;
+    }
+    const revision = ++testRevision;
+    busy(testButton, "正在测试…", async () => {
+      empty(testResult).append(loading("正在分析文本…"));
+      try {
+        const result = await api("/api/builtin-rules/test", { method: "POST", body: { text: testText.value }, signal: pageRequests.signal });
+        if (!view.isConnected || revision !== testRevision) return;
+        empty(testResult).append(el("p", { class: "hint" }, "本次使用规则库版本：" + result.library_version));
+        if (!result.enabled) testResult.append(notice("内置防护总开关已关闭，本次未执行内置检测。", "warn"));
+        else if (!result.matched) testResult.append(el("p", null, "当前已启用检测项未命中该文本。"));
+        else testResult.append(el("p", null, "当前配置会拦截这段文本。"), builtinEvidence(result.hits));
+        panelMotion.reveal(testResult);
+      } catch (err) {
+        if (view.isConnected && revision === testRevision && err.name !== "AbortError") empty(testResult).append(notice(err.message));
+      }
+    }).finally(() => { testButton.disabled = settingsSaving; });
+  });
   empty(view).append(pageHeader("内置广告库", "全局防护 · 对所有群组生效",
-    [iconButton("刷新内置广告库", "refresh-cw", () => renderView())]), ruleTabs(), errors, progress, region);
+    [iconButton("刷新内置广告库", "refresh-cw", () => renderView())]), ruleTabs(), errors, version, progress, region);
   function toggle(id, label, checked, change) {
     const input = el("input", { type: "checkbox", role: "switch", id, checked, "aria-label": label, onchange: () => change(input.checked) });
     return el("label", { class: "switch", for: id }, input,
@@ -481,36 +627,62 @@ async function renderBuiltin(view) {
   }
   function paint(data) {
     if (!view.isConnected) return;
+    rememberBuiltinCatalog(data);
+    version.textContent = "规则库版本：" + data.library_version;
+    testConfig.textContent = data.enabled
+      ? "本次测试使用已启用的检测项；停用项不参与判定。"
+      : "当前总开关已关闭，测试会返回未执行检测。";
     empty(region).append(el("div", { class: "builtin-master" },
       el("div", null, el("h2", null, "内置防护总开关")),
       toggle("builtin-master", "内置防护总开关", data.enabled, (enabled) => save({ enabled }, "builtin-master"))));
     if (!data.enabled) region.append(notice("总开关已关闭，内置检测不生效。自定义规则仍按自身状态执行。", "warn"));
     progress.textContent = "共 " + data.rules.length + " 项检测 · 当前生效 " + data.rules.filter((rule) => rule.effective).length + " 项";
-    const list = el("div", { class: "builtin-list" });
+    region.append(testSection);
+    const groups = new Map();
     for (const rule of data.rules) {
-      const controlId = "builtin-" + rule.id;
-      const description = el("div", { class: "builtin-description" },
-        el("h2", null, rule.name), el("p", { class: "muted" }, rule.description),
-        el("code", { class: "small muted", translate: "no" }, rule.id));
-      if (rule.pattern) description.append(el("details", null, el("summary", null, "检测表达式"),
-        el("pre", { class: "pattern-text", translate: "no" }, rule.pattern)));
-      list.append(el("article", { class: "builtin-rule" }, description,
-        toggle(controlId, "启用" + rule.name, rule.enabled, (enabled) => save({ rules: { [rule.id]: enabled } }, controlId))));
+      const category = rule.category || "通用广告手法";
+      if (!groups.has(category)) groups.set(category, []);
+      groups.get(category).push(rule);
     }
-    region.append(list);
+    for (const [category, rules] of groups) {
+      const list = el("div", { class: "builtin-list" });
+      const group = el("section", { class: "builtin-group", "aria-label": category }, el("h2", null, category), list);
+      for (const rule of rules) {
+        const controlId = "builtin-" + rule.id;
+        const description = el("div", { class: "builtin-description" },
+          el("h3", null, rule.name), el("p", { class: "muted" }, rule.description),
+          el("code", { class: "small muted", translate: "no" }, rule.id),
+          el("div", { class: "builtin-effective" }, icon(rule.effective ? "check" : "circle-alert"), rule.effective ? "当前生效" : rule.enabled ? "总开关关闭，暂未生效" : "当前未启用"));
+        const conditions = el("details", { class: "builtin-conditions" }, el("summary", null, "组合检测条件"),
+          el("ul", null, (rule.conditions || []).map((condition) => el("li", null, condition))));
+        if (rule.pattern) conditions.append(el("p", { class: "hint" }, "辅助匹配表达式，完整判断以上述组合条件为准。"),
+          el("pre", { class: "pattern-text", translate: "no" }, rule.pattern));
+        description.append(conditions);
+        list.append(el("article", { class: "builtin-rule" }, description,
+          toggle(controlId, "启用" + rule.name, rule.enabled, (enabled) => save({ rules: { [rule.id]: enabled } }, controlId))));
+      }
+      region.append(group);
+    }
     async function save(patch, focusId) {
       empty(errors);
+      settingsSaving = true;
+      testButton.disabled = true;
+      invalidateTest("防护配置正在更新，完成后请重新测试。");
       region.querySelectorAll("input").forEach((input) => { input.disabled = true; });
       region.setAttribute("aria-busy", "true");
       progress.textContent = "正在保存…";
       try {
         const result = await api("/api/builtin-rules", { method: "PATCH", body: patch });
         paint(result);
+        invalidateTest("防护配置已更新，请重新测试。");
         toast("内置防护配置已保存并生效");
       } catch (err) {
         paint(data);
+        invalidateTest("配置未保存，仍使用原配置，请重新测试。");
         if (view.isConnected) errors.append(notice(err.message));
       } finally {
+        settingsSaving = false;
+        testButton.disabled = false;
         region.removeAttribute("aria-busy");
         if (view.isConnected) document.getElementById(focusId)?.focus();
       }
@@ -563,7 +735,8 @@ async function renderRules(view) {
       if (!view.isConnected || request !== loadRequest) return;
       rules = data || [];
       paint();
-    } catch (err) { renderError(region, err, reload); }
+      panelMotion.reveal(region);
+    } catch (err) { if (request === loadRequest) renderError(region, err, reload); }
     finally { if (request === loadRequest) region.removeAttribute("aria-busy"); }
   }
   function paint() {
@@ -719,14 +892,30 @@ async function downloadRuleExport(btn) {
   });
 }
 
-const builtinNames = {
-  ad_invite_link: "邀请链接", ad_invite_joinchat: "群组邀请",
-  ad_shortlink: "短链接", ad_keyword_link: "广告词与链接",
-  ad_bot_mention: "机器人提及", ad_channel_forward_link: "频道转发链接",
-};
+function rememberBuiltinCatalog(data) {
+  state.builtinCatalog = new Map((data.rules || []).map((rule) => [rule.id, rule]));
+  state.builtinCatalogLoaded = true;
+}
+async function loadBuiltinCatalog() {
+  if (state.builtinCatalogLoaded) return;
+  try { rememberBuiltinCatalog(await api("/api/builtin-rules")); }
+  catch { /* Audit history remains readable by stored names or stable IDs. */ }
+}
+function builtinHitName(hit) {
+  return hit.name || state.builtinCatalog.get(hit.id)?.name || hit.id;
+}
+function builtinEvidence(hits = []) {
+  return el("ul", { class: "builtin-evidence" }, hits.map((hit) => el("li", null,
+    el("strong", null, builtinHitName(hit)), hit.category ? el("span", { class: "small muted" }, hit.category) : null,
+    el("code", { class: "small muted", translate: "no" }, hit.id),
+    el("ul", null, (hit.evidence || []).map((evidence) => el("li", null, evidence))))));
+}
 function hitBadges(entry) {
   return [
-    ...(entry.builtin_hits || []).map((hit) => el("span", { class: "badge builtin", title: hit }, builtinNames[hit] || hit)),
+    ...(entry.builtin_hits || []).map((id) => {
+      const hit = entry.builtin_details?.hits?.find((item) => item.id === id) || { id };
+      return el("span", { class: "badge builtin", title: id }, builtinHitName(hit));
+    }),
     ...(entry.matched_rule_ids || []).map((id) => el("a", { class: "badge neutral", href: hashURL("rules", { q: "#" + id }) }, "规则 #" + id)),
   ];
 }
@@ -799,11 +988,13 @@ async function renderAudit(view) {
     controller = new AbortController();
     const current = ++request;
     region.setAttribute("aria-busy", "true");
-    empty(region).append(loading("正在查询日志…"));
+    if (!region.children.length) region.append(loading("正在查询日志…"));
     try {
       const query = new URLSearchParams();
       for (const [key, value] of Object.entries(filters)) if (value !== "") query.set(key, value);
-      const page = await api("/api/audit?" + query.toString(), { signal: controller.signal });
+      const [page] = await Promise.all([
+        api("/api/audit?" + query.toString(), { signal: controller.signal }), loadBuiltinCatalog(),
+      ]);
       if (!view.isConnected || current !== request) return;
       if (page.total_pages > 0 && page.page > page.total_pages) {
         filters.page = page.total_pages; refresh(); return;
@@ -816,6 +1007,7 @@ async function renderAudit(view) {
       if (!page.items.length) region.append(emptyState("没有符合条件的记录", button("清除筛选", "x", () => reset.click())));
       else region.append(renderAuditTable(page.items));
       region.append(pagination(page.page, page.total_pages, page.total, (value) => { filters.page = value; refresh(); }));
+      panelMotion.reveal(region);
     } catch (err) { if (current === request) renderError(region, err, refresh); }
     finally { if (current === request) region.removeAttribute("aria-busy"); }
   }
@@ -864,7 +1056,7 @@ async function openAuditDetail(id) {
   modal.actions.append(button("关闭", null, () => modal.close()));
   async function load() {
     try {
-      const entry = await api("/api/audit/" + id);
+      const [entry] = await Promise.all([api("/api/audit/" + id), loadBuiltinCatalog()]);
       if (!modal.dialog.isConnected) return;
       empty(modal.content).append(
         el("div", { class: "detail-status" }, el("span", { class: "badge " + (entry.delete_succeeded ? "ok" : "err") },
@@ -878,6 +1070,14 @@ async function openAuditDetail(id) {
         el("h3", null, "消息摘要"),
         el("pre", { class: "message-content" }, entry.content_summary || "无消息摘要"),
         el("p", { class: "hint" }, "审计仅保存最多 120 字的摘要，较长消息的完整内容未保留。"));
+      if (entry.builtin_details) {
+        modal.content.append(el("section", { class: "builtin-audit-explanation" },
+          el("h3", null, "内置检测原因"),
+          el("p", { class: "hint" }, "命中时规则库版本：" + (entry.builtin_details.library_version || "未记录")),
+          builtinEvidence(entry.builtin_details.hits || [])));
+      } else if (entry.builtin_hits?.length) {
+        modal.content.append(el("p", { class: "hint builtin-audit-legacy" }, "此历史记录未保存规则库版本和详细原因，仅显示原有命中项。"));
+      }
       if (!entry.delete_succeeded) {
         modal.content.append(el("h3", null, "删除失败原因"),
           el("pre", { class: "message-content error-content" }, entry.deletion_error || "Telegram 未返回错误详情。"));
@@ -941,6 +1141,9 @@ async function boot() {
   themeLabel();
   document.getElementById("theme-toggle").addEventListener("click", switchTheme);
   document.getElementById("logout-btn").addEventListener("click", doLogout);
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(() => moveNavIndicator(false)).observe(document.querySelector(".nav"));
+  } else window.addEventListener("resize", () => moveNavIndicator(false));
   const region = document.getElementById("view");
   empty(region).append(loading("正在连接面板…"));
   try {

@@ -1,0 +1,58 @@
+{"id":"d001","family":"direct_service_offer","kind":"positive","text":"承接洗钱业务，资金按单结算","want":["ad_money_laundering"]}
+{"id":"d002","family":"direct_service_offer","kind":"positive","text":"洗资长期接单，欢迎咨询","want":["ad_money_laundering"]}
+{"id":"d003","family":"direct_service_offer","kind":"positive","text":"催情药现货批发，货到付款","want":["ad_aphrodisiac_trade"]}
+{"id":"d004","family":"direct_service_offer","kind":"positive","text":"卡农招募，按单结算佣金","want":["ad_money_mule"]}
+{"id":"d005","family":"direct_service_offer","kind":"positive","text":"百家乐代理招聘，咨询了解返点","want":["ad_gambling"]}
+{"id":"d006","family":"direct_service_offer","kind":"positive","text":"刷单招聘，垫付本金完成任务后返佣","want":["ad_scam_investment"]}
+{"id":"d007","family":"direct_service_offer","kind":"positive","text":"假证批发，按单发货","want":["ad_illicit_goods"]}
+{"id":"d008","family":"direct_service_offer","kind":"positive","text":"接码服务出售，全年在线接单","want":["ad_identity_trade"]}
+{"id":"d009","family":"direct_service_offer","kind":"positive","text":"个人信息打包出售，联系业务员","want":["ad_personal_data_trade"]}
+{"id":"d010","family":"direct_service_offer","kind":"positive","text":"成人视频会员出售，咨询开通","want":["ad_sexual_trade"]}
+{"id":"d011","family":"coupon_purchase_routing","kind":"positive","text":"限时优惠，立即下单 https://t.me/+library_sample","want":["ad_invite_link","ad_keyword_link"]}
+{"id":"d012","family":"coupon_purchase_routing","kind":"positive","text":"限时优惠，立即下单 https://t.me/joinchat/library_sample","want":["ad_invite_joinchat"]}
+{"id":"d013","family":"coupon_purchase_routing","kind":"positive","text":"限时优惠，立即下单 bit.ly/library_sample","want":["ad_shortlink"]}
+{"id":"d014","family":"coupon_purchase_routing","kind":"positive","text":"限时优惠，立即下单 https://shop.example.invalid","want":["ad_keyword_link"]}
+{"id":"d015","family":"coupon_purchase_routing","kind":"positive","text":"限时优惠，立即下单 @sample_shopbot","want":["ad_bot_mention"]}
+{"id":"d016","family":"coupon_purchase_routing","kind":"positive","text":"限时优惠，立即下单 https://shop.example.invalid","channel_forward":true,"want":["ad_channel_forward_link"]}
+{"id":"d017","family":"finance_euphemism_offer","kind":"positive","text":"黑U洗白业务接单，支持 USDT 结算","want":["ad_money_laundering"]}
+{"id":"d018","family":"finance_euphemism_offer","kind":"positive","text":"洗q资金业务接单，有意咨询","want":["ad_money_laundering"]}
+{"id":"d019","family":"finance_euphemism_offer","kind":"positive","text":"走账业务接单，转账流水按点结算","want":["ad_money_laundering"]}
+{"id":"d020","family":"source_code_sale","kind":"positive","text":"钓鱼源码长期出售，提供定制","want":["ad_personal_data_trade"]}
+{"id":"d021","family":"ordinary_sharing","kind":"negative","text":"欢迎加入本地读书讨论群 https://t.me/+reading_sample","want":[]}
+{"id":"d022","family":"ordinary_sharing","kind":"negative","text":"这是我分享的技术文章 bit.ly/article_sample","want":[]}
+{"id":"d023","family":"ordinary_sharing","kind":"negative","text":"@sample_helpbot 的官方使用说明 https://docs.example.invalid","want":[]}
+{"id":"d024","family":"ordinary_sharing","kind":"negative","text":"新闻报道链接 https://news.example.invalid","channel_forward":true,"want":[]}
+{"id":"d025","family":"ordinary_sharing","kind":"negative","text":"免费开源工具的内部实现 https://source.example.invalid","want":[]}
+{"id":"d026","family":"benign_word_senses","kind":"negative","text":"CPU 跑分终于提高了，看看测试结果 https://bench.example.invalid","want":[]}
+{"id":"d027","family":"benign_word_senses","kind":"negative","text":"床上四件套现货批发，咨询卖家","want":[]}
+{"id":"d028","family":"benign_word_senses","kind":"negative","text":"周末钓鱼装备讨论，有兴趣的朋友联系组织者","want":[]}
+{"id":"d029","family":"benign_word_senses","kind":"negative","text":"空调上门服务，预约请联系师傅","want":[]}
+{"id":"d030","family":"benign_word_senses","kind":"negative","text":"请教 USDT 和银行承兑的区别","want":[]}
+{"id":"d031","family":"explicit_refusal","kind":"negative","text":"不承接洗资业务，请不要发送材料","want":[]}
+{"id":"d032","family":"explicit_refusal","kind":"negative","text":"禁止出售催情药，请勿购买","want":[]}
+{"id":"d033","family":"explicit_refusal","kind":"negative","text":"不要开盒和买卖个人信息","want":[]}
+{"id":"d034","family":"attributed_reporting","kind":"negative","text":"警方通报，该团伙承接洗资业务并出售银行卡，请勿参与。","want":[]}
+{"id":"d035","family":"attributed_reporting","kind":"negative","text":"医生提醒，催情药售卖广告涉及危险成分，请勿购买。","want":[]}
+{"id":"d036","family":"attributed_reporting","kind":"negative","text":"警方查获有人出售假钞，案件正在调查 https://news.example.invalid","want":[]}
+{"id":"d037","family":"medical_education","kind":"negative","text":"医学科普：催情药的成分和副作用，请咨询正规医生","want":[]}
+{"id":"d038","family":"medical_education","kind":"negative","text":"研究 GHB 的药理和中毒救治机制","want":[]}
+{"id":"d039","family":"quoted_safety_example","kind":"negative","text":"诈骗话术示例：“刷单招聘，垫付后返佣”。请勿相信。","want":[]}
+{"id":"d040","family":"quoted_safety_example","kind":"negative","text":"警方披露的广告原文：“迷药现货批发，联系 @sample_agent”。请勿购买。","want":[]}
+{"id":"d041","family":"invisible_insertion","kind":"adversarial","text":"承接洗\u200b资业务，联系 @sample_agent","want":["ad_money_laundering"]}
+{"id":"d042","family":"invisible_insertion","kind":"adversarial","text":"催\u2060情药现货批发，联系 @sample_agent","want":["ad_aphrodisiac_trade"]}
+{"id":"d043","family":"symbol_insertion","kind":"adversarial","text":"听✨话✨水现货批发，私信咨询","want":["ad_aphrodisiac_trade"]}
+{"id":"d044","family":"symbol_insertion","kind":"adversarial","text":"承接洗·钱业务，资金按单结算","want":["ad_money_laundering"]}
+{"id":"d045","family":"local_disclaimer_evasion","kind":"adversarial","text":"严禁举报 洗资业务长期接单 @sample_agent","want":["ad_money_laundering"]}
+{"id":"d046","family":"local_disclaimer_evasion","kind":"adversarial","text":"禁止白嫖 催情药现货销售 @sample_agent","want":["ad_aphrodisiac_trade"]}
+{"id":"d047","family":"local_disclaimer_evasion","kind":"adversarial","text":"反诈提醒：催情药现货批发，联系 @sample_agent","want":["ad_aphrodisiac_trade"]}
+{"id":"d048","family":"local_disclaimer_evasion","kind":"adversarial","text":"警方通报洗钱案件。\n\n承接洗资业务，联系 @sample_agent","want":["ad_money_laundering"]}
+{"id":"d049","family":"reverse_layout","kind":"adversarial","text":"联系 @sample_agent\n催情药现货批发","want":["ad_aphrodisiac_trade"]}
+{"id":"d050","family":"hidden_url_offer","kind":"adversarial","text":"限时优惠，立即下单","entity_url":"https://t.me/+hidden_sample","want":["ad_invite_link"]}
+{"id":"d051","family":"url_path_word_isolation","kind":"negative","text":"https://example.test/wiki/洗资接单","want":[]}
+{"id":"d052","family":"url_path_word_isolation","kind":"negative","text":"资料 https://health.example.test/催情药销售风险","want":[]}
+{"id":"d053","family":"compliance_terminology","kind":"negative","text":"反洗钱技术：如何识别招聘骗局？","want":[]}
+{"id":"d054","family":"compliance_terminology","kind":"negative","text":"anti-money laundering 技术招聘岗位讨论","want":[]}
+{"id":"d055","family":"benign_word_senses","kind":"negative","text":"宿舍水房招募志愿者打扫卫生。","want":[]}
+{"id":"d056","family":"benign_word_senses","kind":"negative","text":"朋友的洗衣店承接衣服代洗。","want":[]}
+{"id":"d057","family":"finance_euphemism_offer","kind":"positive","text":"代洗资金业务，按单接单，有意详谈","want":["ad_money_laundering"]}
+{"id":"d058","family":"finance_euphemism_offer","kind":"positive","text":"水房资金通道接单，收款流水秒结","want":["ad_money_mule"]}

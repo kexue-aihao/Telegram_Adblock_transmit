@@ -1,7 +1,10 @@
 package builtin
 
 import (
+	"encoding/json"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
@@ -23,83 +26,244 @@ func withForward(forward domain.ForwardInfo) func(*domain.ModerationMessage) {
 	return func(m *domain.ModerationMessage) { m.Forward = &forward }
 }
 
-func TestRegexDatabaseHits(t *testing.T) {
-	c := New(true)
-	cases := []struct {
-		text string
-		want string
-	}{
-		{"进群 https://t.me/+abc123", HitInviteLinkShort},
-		{"加入 https://t.me/joinchat/XYZ123", HitInviteLinkJoinchat},
-		{"点我 bit.ly/3abc", HitShortLink},
-		{"免费领取 https://t.me/abc", HitAdKeywordWithLink},
+func detectorFixtures() map[string]domain.ModerationMessage {
+	return map[string]domain.ModerationMessage{
+		HitInviteLinkShort:        msg("限时优惠，立即下单 https://t.me/+sample_invite"),
+		HitInviteLinkJoinchat:     msg("限时优惠，立即下单 https://t.me/joinchat/sample_invite"),
+		HitShortLink:              msg("限时优惠，立即下单 bit.ly/example"),
+		HitAdKeywordWithLink:      msg("限时优惠，立即下单 https://shop.example.invalid"),
+		HitBotMention:             msg("限时优惠，立即下单 @example_shopbot", withEntities(domain.MessageEntityInfo{Type: "mention", Username: "example_shopbot"})),
+		HitChannelForwardWithLink: msg("限时优惠，立即下单 https://shop.example.invalid", withForward(domain.ForwardInfo{Type: "channel"})),
+		HitMoneyLaundering:        msg("承接洗资业务，联系 @example_agent"),
+		HitMoneyMule:              msg("钱骡招募，日结佣金，联系 @example_agent"),
+		HitAphrodisiacTrade:       msg("催情药现货批发，联系 @example_agent"),
+		HitGambling:               msg("百家乐代理招募，联系 @example_agent"),
+		HitScamInvestment:         msg("刷单招聘，垫付本金后返佣，联系 @example_agent"),
+		HitIllicitGoods:           msg("假钞现货出售，联系 @example_agent"),
+		HitIdentityTrade:          msg("实名号批量出售，联系 @example_agent"),
+		HitPersonalDataTrade:      msg("社工库个人信息打包出售，联系 @example_agent"),
+		HitSexualTrade:            msg("成人视频会员出售，联系 @example_agent"),
 	}
-	for _, tc := range cases {
-		hits := c.Detect(msg(tc.text))
-		if !slices.Contains(hits, tc.want) {
-			t.Errorf("Detect(%q) = %v, want it to contain %s", tc.text, hits, tc.want)
+}
+
+func TestEveryCatalogRuleHasAnIndependentFixture(t *testing.T) {
+	checker := New(true)
+	fixtures := detectorFixtures()
+	if len(fixtures) != len(Catalog()) {
+		t.Fatalf("catalog/fixture mismatch: %d/%d", len(Catalog()), len(fixtures))
+	}
+	for _, item := range Catalog() {
+		t.Run(item.ID, func(t *testing.T) {
+			message, ok := fixtures[item.ID]
+			if !ok {
+				t.Fatal("missing reviewed fixture")
+			}
+			if hits := checker.Detect(message); !slices.Contains(hits, item.ID) {
+				t.Fatalf("Detect(%q) = %v, want %s", message.Text, hits, item.ID)
+			}
+		})
+	}
+}
+
+func TestLegacyRulesPreserveOrdinarySharing(t *testing.T) {
+	checker := New(true)
+	cases := []domain.ModerationMessage{
+		msg("欢迎加入读书讨论群 https://t.me/+reading_group"),
+		msg("本周同学会 https://t.me/joinchat/friends"),
+		msg("这是短链接 bit.ly/example"),
+		msg("免费开源工具的使用说明 https://docs.example.invalid"),
+		msg("有问题请问 @helpbot https://docs.example.invalid"),
+		msg("普通频道文章 https://news.example.invalid", withForward(domain.ForwardInfo{Type: "channel"})),
+		msg("看下 @xiaoming 这个链接 https://example.invalid"),
+		msg("洗钱是什么"),
+		msg("催情药"),
+		msg("讨论 USDT 承兑"),
+		msg("宿舍水房招募志愿者打扫卫生。"),
+		msg("朋友的洗衣店承接衣服代洗。"),
+		msg("洗钱案件可咨询当地警方。"),
+		msg("催情药有副作用吗，咨询医生了解一下。"),
+		msg("反诈提醒：如果发现洗钱广告，请联系警方举报。"),
+		msg("催情药的商家联系方式不应该传播。"),
+		msg("催情药的商家联系方式不应该传播 https://policy.example.invalid"),
+		msg("洗钱案件可咨询当地警方 @police_example"),
+	}
+	for _, message := range cases {
+		if hits := checker.Detect(message); len(hits) != 0 {
+			t.Errorf("ordinary sharing %q hit %v", message.Text, hits)
 		}
 	}
 }
 
-func TestBotMentionRequiresAdSignal(t *testing.T) {
-	c := New(true)
-	// text_mention of a bot + a link -> kill.
-	with := msg("加 @somespambot https://t.me/xyz",
-		withEntities(domain.MessageEntityInfo{Type: "text_mention", Username: "somespambot", IsBot: true}))
-	if hits := c.Detect(with); !slices.Contains(hits, HitBotMention) {
-		t.Fatalf("Detect(bot mention + link) = %v, want %s", hits, HitBotMention)
+func TestContextRemainsLocal(t *testing.T) {
+	checker := New(true)
+	cases := []struct {
+		name, text string
+		want       string
+	}{
+		{"plain denial", "不承接洗钱和洗资业务，禁止发送材料", ""},
+		{"police report", "警方通报有人通过跑分洗钱，提醒居民不要参与 https://news.example.invalid", ""},
+		{"medical explanation", "医学科普：催情药的成分和副作用有哪些，请咨询正规医生 https://health.example.invalid", ""},
+		{"quoted warning", "警方披露的诈骗话术示例：“催情药现货批发，联系 @example_agent”。请勿购买。", ""},
+		{"plain quote is no exemption", "“催情药现货批发，联系 @example_agent”", HitAphrodisiacTrade},
+		{"fake warning label", "反诈提醒：催情药现货批发，联系 @example_agent", HitAphrodisiacTrade},
+		{"self directed no address", "洗资业务有意私聊", HitMoneyLaundering},
+		{"irrelevant no service disclaimer", "不提供售后 催情药现货销售 @example_agent", HitAphrodisiacTrade},
+		{"bound no drug service", "不提供催情药销售服务，禁止发送订单", ""},
+		{"unrelated warning", "请勿轻信骗局。\n\n承接洗资业务，联系 @example_agent", HitMoneyLaundering},
+		{"warning then real offer", "警方通报洗钱案件。\n\n承接洗资业务，联系 @example_agent", HitMoneyLaundering},
+		{"denial then other product", "不承接洗资业务。\n\n催情药现货批发，联系 @example_agent", HitAphrodisiacTrade},
+		{"same paragraph contrast", "不做普通咨询，但是承接洗资业务，联系 @example_agent", HitMoneyLaundering},
+		{"quote then live solicitation", "诈骗话术示例：“催情药”。实际现货批发，立即下单，联系 @example_agent", HitAphrodisiacTrade},
 	}
-	// mention username ending in "bot" + ad keyword -> kill.
-	byName := msg("@freescorebot 扫码领红包",
-		withEntities(domain.MessageEntityInfo{Type: "mention", Username: "freescorebot"}))
-	if hits := c.Detect(byName); !slices.Contains(hits, HitBotMention) {
-		t.Fatalf("Detect(bot username + keyword) = %v, want %s", hits, HitBotMention)
-	}
-	// A bot mention with no link and no ad word must stay untouched.
-	benign := msg("有问题可以问 @helpbot",
-		withEntities(domain.MessageEntityInfo{Type: "mention", Username: "helpbot"}))
-	if hits := c.Detect(benign); len(hits) != 0 {
-		t.Fatalf("Detect(benign bot mention) = %v, want none", hits)
-	}
-	// Mentioning a human with a link is not an ad.
-	human := msg("看下 @xiaoming 这个链接 https://example.com",
-		withEntities(domain.MessageEntityInfo{Type: "mention", Username: "xiaoming"}))
-	if hits := c.Detect(human); len(hits) != 0 {
-		t.Fatalf("Detect(human mention + link) = %v, want none", hits)
-	}
-}
-
-func TestChannelForwardRequiresLink(t *testing.T) {
-	c := New(true)
-	forwarded := msg("something shared",
-		withEntities(domain.MessageEntityInfo{Type: "url"}),
-		withForward(domain.ForwardInfo{Type: "channel", SourceID: -1001234, SourceTitle: "广告频道"}))
-	if hits := c.Detect(forwarded); !slices.Contains(hits, HitChannelForwardWithLink) {
-		t.Fatalf("Detect(channel forward + url entity) = %v, want %s", hits, HitChannelForwardWithLink)
-	}
-	// Channel forward without a link stays untouched.
-	noLink := msg("普通转发", withForward(domain.ForwardInfo{Type: "channel", SourceID: -1001234}))
-	if hits := c.Detect(noLink); len(hits) != 0 {
-		t.Fatalf("Detect(channel forward, no link) = %v, want none", hits)
-	}
-	// User forward with a link is not treated as channel-forward spam.
-	userForward := msg("看看这个 t.me/xxx", withForward(domain.ForwardInfo{Type: "user", SourceID: 123}))
-	if hits := c.Detect(userForward); len(hits) != 0 {
-		t.Fatalf("Detect(user forward + link) = %v, want none (no ad keywords/invite)", hits)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hits := checker.Detect(msg(tc.text))
+			if tc.want == "" && len(hits) != 0 || tc.want != "" && !slices.Contains(hits, tc.want) {
+				t.Fatalf("Detect(%q) = %v, want %q", tc.text, hits, tc.want)
+			}
+		})
 	}
 }
 
-func TestDetectDisablesAndDeduplicates(t *testing.T) {
-	off := New(false)
-	if hits := off.Detect(msg("https://t.me/+abc")); len(hits) != 0 {
-		t.Fatalf("disabled checker returned hits: %v", hits)
+func TestNormalizationAndOrdering(t *testing.T) {
+	checker := New(true)
+	for _, text := range []string{
+		"承接洗\u200b资业务，联系 @example_agent",
+		"承接洗💰资业务，联系 @example_agent",
+		"承接洗.资业务，联系 @example_agent",
+		"承接洗 資業務，聯係 @example_agent",
+		"承接洗资业务\n联系 @example_agent",
+		"联系 @example_agent\n承接洗资业务",
+		"承接洗\u202e资业务，联系 @example_agent",
+	} {
+		if hits := checker.Detect(msg(text)); !slices.Contains(hits, HitMoneyLaundering) {
+			t.Errorf("missed normalization/order %q: %v", text, hits)
+		}
 	}
-	on := New(true)
-	// Same invite text matches only the short-invite rule once.
-	text := "进群 https://t.me/+abc 加我"
-	hits := on.Detect(msg(text))
-	if len(hits) != 1 || hits[0] != HitInviteLinkShort {
-		t.Fatalf("Detect(%q) = %v, want exactly [%s]", text, hits, HitInviteLinkShort)
+	for _, text := range []string{"催 情 藥現貨批發，聯係 @example_agent", "听✨话✨水现货批发", "ａｐｈｒｏｄｉｓｉａｃ ｆｏｒ ｓａｌｅ"} {
+		if hits := checker.Detect(msg(text)); !slices.Contains(hits, HitAphrodisiacTrade) {
+			t.Errorf("missed drug variation %q: %v", text, hits)
+		}
+	}
+}
+
+func TestEntityAndButtonTargets(t *testing.T) {
+	checker := New(true)
+	cases := []struct {
+		name    string
+		message domain.ModerationMessage
+		want    string
+	}{
+		{"hidden invite", msg("限时优惠，立即下单", withEntities(domain.MessageEntityInfo{Type: "text_link", URL: "https://t.me/+hidden_sample"})), HitInviteLinkShort},
+		{"hidden shortlink", msg("限时优惠，立即下单", withEntities(domain.MessageEntityInfo{Type: "text_link", URL: "https://bit.ly/hidden_sample"})), HitShortLink},
+		{"emoji UTF16", msg("😀立即下单", withEntities(domain.MessageEntityInfo{Type: "text_link", Offset: 2, Length: 4, URL: "https://t.me/+hidden_sample"})), HitInviteLinkShort},
+		{"tg resolve bot", msg("限时优惠，立即下单", withEntities(domain.MessageEntityInfo{Type: "text_link", URL: "tg://resolve?domain=example_shopbot"})), HitBotMention},
+		{"bot without suffix", msg("催情药现货批发", withEntities(domain.MessageEntityInfo{Type: "text_mention", Username: "example_shop", IsBot: true})), HitBotMention},
+		{"caption", domain.ModerationMessage{Caption: "催情药现货批发，联系 @example_agent"}, HitAphrodisiacTrade},
+		{"only button", domain.ModerationMessage{InlineButtons: []domain.InlineButtonInfo{{Text: "催情药现货批发", URL: "https://t.me/example_agent"}}}, HitAphrodisiacTrade},
+		{"button CTA", domain.ModerationMessage{Text: "催情药", InlineButtons: []domain.InlineButtonInfo{{Text: "立即下单", URL: "https://t.me/example_agent"}}}, HitAphrodisiacTrade},
+		{"body plus button", domain.ModerationMessage{Text: "承接洗资业务", InlineButtons: []domain.InlineButtonInfo{{Text: "联系客服", URL: "https://t.me/example_agent"}}}, HitMoneyLaundering},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			before, _ := json.Marshal(tc.message)
+			hits := checker.Detect(tc.message)
+			if !slices.Contains(hits, tc.want) {
+				t.Fatalf("got %v, want %s", hits, tc.want)
+			}
+			after, _ := json.Marshal(tc.message)
+			if string(before) != string(after) {
+				t.Fatal("analysis mutated the original message")
+			}
+		})
+	}
+}
+
+func TestIndependentButtonSourcesAndMedicalReferral(t *testing.T) {
+	for _, message := range []domain.ModerationMessage{
+		{Text: "便民服务菜单", InlineButtons: []domain.InlineButtonInfo{
+			{Text: "个人信息", URL: "https://example.org/profile"},
+			{Text: "出售闲置", URL: "https://example.org/listings"},
+		}},
+		{Text: "催情药有副作用吗？", InlineButtons: []domain.InlineButtonInfo{
+			{Text: "咨询医生", URL: "https://hospital.example.org/consult"},
+		}},
+	} {
+		if hits := New(true).Detect(message); len(hits) != 0 {
+			t.Errorf("independent navigation/referral sources combined into ad: %v", hits)
+		}
+	}
+}
+
+func TestAdjacentHighRiskTitles(t *testing.T) {
+	checker := New(true)
+	for _, text := range []string{
+		"催情药\n\n批发，私聊 @example_agent",
+		"🔥催情藥🔥\n\n现货，立即下单",
+		"洗资\n\n资金按单结算，有意私聊",
+		"听话水\n\n\n\n现货批发",
+	} {
+		if hits := checker.Detect(msg(text)); len(hits) == 0 {
+			t.Errorf("missed adjacent advertising title %q", text)
+		}
+	}
+	for _, text := range []string{
+		"今天学习洗钱案件的概念。\n\n二手椅子现货出售，自提。",
+		"医生介绍催情药的危害。\n\n二手椅子现货出售，自提。",
+		"个人信息\n\n出售闲置，自提",
+		"跑分\n\n设备现货出售",
+		"催情药\n\n这段是其他话题。\n\n二手椅子现货出售，自提。",
+	} {
+		if hits := checker.Detect(msg(text)); len(hits) != 0 {
+			t.Errorf("unrelated paragraphs inherited a topic %q: %v", text, hits)
+		}
+	}
+}
+
+func TestAnalysisAndCatalogAreIndependentSnapshots(t *testing.T) {
+	checker := New(true)
+	message := msg("承接洗资业务，联系 @private_contact；催情药现货批发")
+	analysis := checker.Analyze(message)
+	if !analysis.Enabled || !analysis.Matched || analysis.LibraryVersion != LibraryVersion || len(analysis.Hits) < 2 {
+		t.Fatalf("unexpected analysis: %+v", analysis)
+	}
+	ids := analysis.HitIDs()
+	if len(ids) != len(slices.Compact(slices.Clone(ids))) || !reflect.DeepEqual(ids, checker.Detect(message)) {
+		t.Fatalf("unstable or duplicate IDs: %v", ids)
+	}
+	details := analysis.Details()
+	details.Hits[0].Evidence[0] = "mutated"
+	if analysis.Hits[0].Evidence[0] == "mutated" {
+		t.Fatal("Details shares mutable evidence")
+	}
+	encoded, _ := json.Marshal(analysis)
+	if strings.Contains(string(encoded), "private_contact") || strings.Contains(string(encoded), "承接洗资业务") {
+		t.Fatal("analysis leaked message content")
+	}
+	catalog := Catalog()
+	catalog[0].Conditions[0] = "mutated"
+	if Catalog()[0].Conditions[0] == "mutated" {
+		t.Fatal("Catalog shares condition slices")
+	}
+	for _, off := range []*Checker{nil, New(false), {}} {
+		got := off.Analyze(message)
+		if got.Enabled || got.Matched || len(got.Hits) != 0 || got.Details() != nil || got.LibraryVersion != LibraryVersion {
+			t.Fatalf("disabled/nil checker returned %+v", got)
+		}
+	}
+	benign := checker.Analyze(msg("正常讨论"))
+	if !benign.Enabled || benign.Matched || benign.Details() != nil || benign.Hits == nil {
+		t.Fatalf("unexpected benign response: %+v", benign)
+	}
+}
+
+func TestLongMessagesDoNotLoseTailOrJoinDistantEvidence(t *testing.T) {
+	checker := New(true)
+	if hits := checker.Detect(msg(strings.Repeat("普通讨论文本", 1000) + " 催情药现货批发")); !slices.Contains(hits, HitAphrodisiacTrade) {
+		t.Fatalf("tail missed: %v", hits)
+	}
+	text := "洗资 " + strings.Repeat("普通讨论文本", 100) + " 联系 @example_agent"
+	if hits := checker.Detect(msg(text)); len(hits) != 0 {
+		t.Fatalf("unrelated distant evidence joined: %v", hits)
 	}
 }
