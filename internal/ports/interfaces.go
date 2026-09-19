@@ -33,7 +33,10 @@ type AuditStore interface {
 
 type TelegramClient interface {
 	DeleteMessage(ctx context.Context, chatID int64, messageID int) error
-	SendMessage(ctx context.Context, chatID int64, threadID *int, text string) error
+	// SendMessage posts a message and returns its Telegram message ID so the
+	// caller can remove a moderation notice later. A transport that cannot
+	// report the ID returns 0 with a nil error.
+	SendMessage(ctx context.Context, chatID int64, threadID *int, text string) (int, error)
 	IsGroupAdmin(ctx context.Context, chatID, userID int64) (bool, error)
 	// BanChatMember permanently bans (and kicks) a user from the chat,
 	// revoking their past messages. Used by the three-strike ad policy.

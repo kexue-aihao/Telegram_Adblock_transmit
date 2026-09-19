@@ -20,6 +20,13 @@ const (
 	HitIdentityTrade          = "ad_identity_trade"
 	HitPersonalDataTrade      = "ad_personal_data_trade"
 	HitSexualTrade            = "ad_sexual_trade"
+	HitLaunderingSlang        = "ad_laundering_slang"
+	HitIdentityRecruit        = "ad_identity_recruit"
+	HitSexualSlang            = "ad_sexual_slang"
+	HitGroupResourceTrade     = "ad_group_resource_trade"
+	HitBulkPosting            = "ad_bulk_posting"
+	HitIdleProject            = "ad_idle_project"
+	HitGreyMarket             = "ad_grey_market"
 )
 
 type detector struct {
@@ -61,6 +68,34 @@ var registry = []detector{
 	topicDetector(HitSexualTrade, "色情资源与性交易推广", "色情交易", "色情交易主题",
 		"性交易、色情资源主题；上门服务等通用词需额外性交易证据", sexTradeTopic,
 		func(s section) bool { return sexTradeWeak.MatchString(s.text) && sexContext.MatchString(s.text) }),
+	slangDetector(HitLaunderingSlang, "跑分黑话与资金车队招募", "跑分资金通道",
+		"马车、红包车、人头号、押车等车队或码号黑话与汇率点位、善后、保司法、卸货无忧等结算或保障承诺",
+		[]string{"马车、红包车、人头号、老群等车队码号黑话", "汇率点位、善后、保司法、卸货无忧等结算或保障承诺", "同一段落出现招募、提供或可联系入口"},
+		matchLaunderingSlang),
+	slangDetector(HitIdentityRecruit, "实名素材与拍照采集招募", "账号实名工具",
+		"拍照兼职、拍照采集、手持身份证拍照、人脸采集等实名素材招募与兼职日结报酬",
+		[]string{"拍照、采集、手持证件或人脸素材词组", "兼职、日结、收人等报酬招募术语", "同一段落出现联系入口或交易用语"},
+		matchIdentityRecruit),
+	slangDetector(HitSexualSlang, "上门服务与招嫖暗语", "色情交易",
+		"空降、上门、快餐、包夜等暗语与色情标记、价格或时长承诺",
+		[]string{"空降、上门、快餐、会所等暗语", "色情标记或价格时长承诺", "排除维修、保洁等普通上门服务"},
+		matchSexualSlang),
+	slangDetector(HitGroupResourceTrade, "群资源与账号号源买卖", "群资源与账号",
+		"老群、群资源、僵尸群、号源、白号等与出售、收购、转让、报价",
+		[]string{"老群、群资源、号源、白号等资源术语", "出售、收购、转让、报价等买卖术语", "同一段落出现联系入口或价格"},
+		matchGroupResourceTrade),
+	slangDetector(HitBulkPosting, "广告代发与引流服务", "广告代发引流",
+		"广告代发、群发、站群、引流等投放服务与支付结算、套餐报价、虚拟卡",
+		[]string{"代发、群发、站群、引流等投放机制", "广告、推广、私信等投放对象", "支付结算、套餐报价、VCC 虚拟卡或联系入口"},
+		matchBulkPosting),
+	slangDetector(HitIdleProject, "挂机项目与高收益招募", "诈骗返佣主题",
+		"挂机、短剧、搬砖项目与日入、一天赚、月入过万等收益承诺",
+		[]string{"挂机、短剧、搬砖、拉代理等项目术语", "日入、日赚、一天赚、日结加金额等收益承诺", "名额有限、手把手带、加群等稀缺话术"},
+		matchIdleProject),
+	slangDetector(HitGreyMarket, "水货与走私数码推销", "水货与走私数码",
+		"水货、水果机、港版美版、华强北等货源与只要、特价、现货、拿货等推销术语",
+		[]string{"水货、版本机、华强北等货源术语", "数码商品与低价、现货、拿货等推销术语", "招手机店合作并带直接联系"},
+		matchGreyMarket),
 }
 
 func linkDetector(id, name, condition, evidence string, selector func(section, messageView) bool) detector {
@@ -78,6 +113,19 @@ func linkDetector(id, name, condition, evidence string, selector func(section, m
 			}
 			return nil
 		},
+	}
+}
+
+// slangDetector publishes a rule whose vocabulary is ordinary words on their
+// own. The match functions in slang.go require two independent signals.
+func slangDetector(id, name, category, condition string, conditions []string, match func(messageView) []string) detector {
+	return detector{
+		info: RuleInfo{
+			ID: id, Name: name, Category: category,
+			Description: condition + "；单个行业词、新闻、反诈与普通服务讨论不单独触发。",
+			Conditions:  conditions,
+		},
+		match: match,
 	}
 }
 
@@ -119,6 +167,7 @@ func topicDetector(id, name, category, evidence, condition string, strong *lexic
 func commercialIntent(part section) bool {
 	return part.buttonOffer || transaction.MatchString(part.text) ||
 		selfSolicitation.MatchString(part.text) ||
+		incomePromise.MatchString(part.text) ||
 		solicitation.MatchString(part.text) && (part.contact || part.links.any) ||
 		priceOrDelivery.MatchString(part.text) && (part.contact || part.links.any || solicitation.MatchString(part.text))
 }

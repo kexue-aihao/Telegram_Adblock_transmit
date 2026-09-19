@@ -22,6 +22,7 @@ import (
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/profile"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/retention"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/rules"
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/settings"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/store"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/telegram"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/webui"
@@ -62,6 +63,15 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// Runtime switches. Environment values apply until an administrator saves
+	// them from the panel or from the /settings command.
+	botSettings, err := settings.NewManager(ctx, domain.BotSettings{
+		BioCheckEnabled: cfg.BioCheckEnabled,
+		OwnerUserIDs:    cfg.BotOwnerIDs,
+	}, store.NewBotSettingsRepository(pool))
+	if err != nil {
+		return err
+	}
 	cache := rules.NewMemoryCache()
 	httpClient := &http.Client{Timeout: cfg.TelegramHTTPTimeout}
 	botAPI, err := tgbotapi.NewBotAPIWithClient(cfg.BotToken, cfg.TelegramAPIEndpoint, httpClient)
@@ -72,11 +82,16 @@ func run() error {
 	service := moderation.NewService(ruleStore, cache, auditStore, telegramClient, logger)
 	service.SetBotUsername(botAPI.Self.UserName)
 	service.SetBuiltinFilter(builtinFilter)
-	if cfg.BioCheckEnabled {
-		service.SetUserProfileReader(profile.New(telegramClient, logger))
-	}
-	logger.Info("user bio checks configured", "enabled", cfg.BioCheckEnabled)
+	// The reader is always attached so the panel and /settings can switch the
+	// check on at runtime; no profile request is made while it is off.
+	service.SetUserProfileReader(profile.New(telegramClient, logger))
+	service.SetBotSettings(botSettings)
+	current := botSettings.Settings()
+	logger.Info("runtime settings loaded", "bio_check", current.BioCheckEnabled,
+		"cross_group_management", current.CrossGroupManagement, "owners", len(current.OwnerUserIDs))
 	service.SetSpamPolicy(cfg.SpamStrikeLimit, cfg.SpamStrikeWindow)
+	service.SetNoticeTTL(cfg.NoticeTTL)
+	logger.Info("deletion notice policy configured", "notice_ttl", cfg.NoticeTTL)
 	if err := service.LoadCache(ctx); err != nil {
 		return fmt.Errorf("load moderation rules: %w", err)
 	}
@@ -94,6 +109,7 @@ func run() error {
 			Refresher:     service,
 			SettingsStore: settingsStore,
 			BuiltinFilter: builtinFilter,
+			BotSettings:   botSettings,
 			Username:      cfg.WebUIUsername,
 			Password:      cfg.WebUIPassword,
 			SessionSecret: []byte(cfg.WebUISessionSecret),

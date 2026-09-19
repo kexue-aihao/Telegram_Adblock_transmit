@@ -15,6 +15,7 @@ import (
 
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/builtin"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/ports"
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/settings"
 )
 
 //go:embed assets
@@ -37,6 +38,9 @@ type Options struct {
 	// values passed via Username/Password.
 	SettingsStore ports.PanelSettingsStore
 	BuiltinFilter *builtin.Checker
+	// BotSettings holds the runtime switches (profile check, cross-group
+	// management, bot owners) shared with the moderation service.
+	BotSettings *settings.Manager
 
 	Username      string
 	Password      string
@@ -169,6 +173,8 @@ func (s *Server) routes() {
 	mux.Handle("GET /api/settings/account", authed(s.handleGetAccount))
 	mux.Handle("POST /api/settings/account", authedCSRF(s.handleUpdateAccount))
 	mux.Handle("POST /api/settings/password", authedCSRF(s.handleUpdatePassword))
+	mux.Handle("GET /api/bot-settings", authed(s.handleGetBotSettings))
+	mux.Handle("PATCH /api/bot-settings", authedCSRF(s.handleUpdateBotSettings))
 
 	// Fallback for unknown /api paths so API clients get a JSON 404 instead of
 	// the SPA index. One pattern per method keeps them strictly more specific

@@ -10,9 +10,9 @@
 
 - 广告规则全局共享，处罚计次按群组和用户隔离。
 - 检查新消息和编辑消息的 `text`、媒体 `caption`、隐藏链接以及内联按钮的文字和链接。
-- 命中规则后删除消息，并记录删除成功或失败的审计记录。
-- 内置广告库 2.1（默认开启）：15 项离线组合检测，重点识别洗钱洗资、跑分资金通道、催情迷情药品交易，同时覆盖博彩、诈骗招募、账号和隐私数据交易等广告。支持精选繁体、零宽字符、插符号等变体；领域词必须结合交易或招揽证据，邀请链接、短链、机器人和频道转发也需推广证据才删除。面板支持分类、总开关、逐项启停和无副作用的文本测试；审计保存库版本与简短命中原因。详细条件和能力边界见[内置广告库管理](docs/builtin-management.md)。
-- 简介辅助检测（默认关闭）：开启 `BIO_CHECK_ENABLED=true` 后，对“看我主页”“点我头像”等主动引流消息尝试查询发送者简介；简介独立命中内置广告规则才删消息并计次。读取失败时跳过，审计标明“证据来源：用户简介”。
+- 命中规则后删除消息，并记录删除成功或失败的审计记录。删除成功后机器人回复命中原因：内置广告库命中回复“该信息因匹配内置广告库已删除。”，仅自定义规则命中回复“该消息因匹配广告规则已删除。”；提示默认在 10 秒后由机器人自动删除（`NOTICE_TTL` 调整，设为 `0` 保留提示）。（内置库优先于自定义规则判定，因此两者都命中时按内置库提示。）
+- 内置广告库 2.3（默认开启）：22 项离线组合检测，重点识别洗钱洗资、跑分资金通道（马车、红包车、人头号、押车等车队黑话与汇率点位、善后、保司法、卸货无忧等承诺）、催情迷情药品交易，同时覆盖博彩、诈骗招募（含挂机、短剧项目与日入、一天赚等收益承诺）、实名素材采集招募（拍照兼职、拍照采集、手持证件、人脸采集）、上门招嫖暗语（空降、上门、快餐、包夜加色情或价格标记）、群资源和账号号源买卖、广告代发与引流服务（代发、群发、站群、引流加支付结算或 VCC 虚拟卡）以及水货走私数码（水果机、港版美版、华强北加只要、特价、拿货）等广告。支持精选繁体、零宽字符、插符号、全角字符等变体；歧义词必须同时出现另一类独立信号并结合交易或招揽证据，维修、保洁等普通上门服务、工地日结用工和二手手机转让不受影响。邀请链接、短链、机器人和频道转发也需推广证据才删除。面板支持分类、总开关、逐项启停和无副作用的文本测试；审计保存库版本与简短命中原因。详细条件和能力边界见[内置广告库管理](docs/builtin-management.md)。
+- 简介辅助检测（默认关闭）：开启后，对“看我主页”“点我头像”等主动引流消息尝试查询发送者简介；简介独立命中内置广告规则才删消息并计次。读取失败时跳过，审计标明“证据来源：用户简介”。可在面板「设置 → 运行设置」或群里 `/settings bio_check on|off` 随时开关，无需重启。
 - 规则全局共享：任何群添加/修改的规则对所有群组即时生效（不再按群隔离）。面板「规则管理」页可一键导出全部规则为 JSON 备份。
 - 广告三次封禁：同一用户在同一群组 24 小时内有 3 条不同消息命中广告（自定义规则和内置库均计入），自动永久封禁并踢出。同一消息编辑或重复投递在窗口内最多计一次；阈值由 `SPAM_STRIKE_LIMIT`/`SPAM_STRIKE_WINDOW` 调整。
 - 在 Forum Topics 群组中沿用原消息的 `message_thread_id` 发送提示。
@@ -77,7 +77,7 @@ ghcr.io/kexue-aihao/telegram-adblock-transmit
 生产环境建议固定版本或不可变摘要，不要长期使用 `latest`：
 
 ~~~env
-BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.9.1
+BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.10.0
 # 或：
 # BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit@sha256:<digest>
 ~~~
@@ -108,12 +108,12 @@ WEBUI_PASSWORD=替换为面板密码 \
 bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/scripts/deploy.sh)
 ~~~
 
-常用可选变量：`DEPLOY_DIR`（默认 `/opt/telegram-adblock-transmit`，已有部署应使用原目录）、`RELEASE_VERSION`（例如 `v1.9.1`）、`BOT_IMAGE`（完整镜像引用，优先级最高）、`WEBUI_ENABLE`（`1` 启用、`0` 关闭；升级时不传则保留）、`WEBUI_ADDR`（首次启用默认 `0.0.0.0:8080`）、`BIO_CHECK_ENABLED`（`true` / `false`，不传则保留；首次默认关闭）。
+常用可选变量：`DEPLOY_DIR`（默认 `/opt/telegram-adblock-transmit`，已有部署应使用原目录）、`RELEASE_VERSION`（例如 `v1.10.0`）、`BOT_IMAGE`（完整镜像引用，优先级最高）、`WEBUI_ENABLE`（`1` 启用、`0` 关闭；升级时不传则保留）、`WEBUI_ADDR`（首次启用默认 `0.0.0.0:8080`）、`BIO_CHECK_ENABLED`（`true` / `false`，不传则保留；首次默认关闭）。
 
 版本选择顺序：本次显式传入的 `BOT_IMAGE` → `RELEASE_VERSION` → 已配置的自定义镜像 → GitHub 最新正式版。默认运行会将旧的官方版本标签、摘要或 `latest` 替换成最新正式版固定标签，后续手动执行 Compose 仍使用该标签。需要保持某个版本或回滚时，每次运行一键脚本显式传入目标，例如：
 
 ~~~bash
-RELEASE_VERSION=v1.9.1 bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/scripts/deploy.sh)
+RELEASE_VERSION=v1.10.0 bash <(curl -fsSL https://raw.githubusercontent.com/kexue-aihao/Telegram_Adblock_transmit/master/scripts/deploy.sh)
 ~~~
 
 脚本检查本目录的 Compose 标签（包含已停止容器）及数据库卷，沿用已有项目名，避免创建另一套数据库。保留 `.env` 中的凭据和其他配置，不删除数据库卷、不执行 `down -v`；只有显式指定的面板/简介选项、镜像目标和项目名会更新。发现旧服务或数据库卷但原 `.env` 丢失时会停止，需先恢复原配置。
@@ -162,7 +162,7 @@ chmod 600 .env
 ~~~env
 BOT_TOKEN=替换为BotFather生成的Token
 POSTGRES_PASSWORD=生成一个足够长的随机密码
-BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.9.1
+BOT_IMAGE=ghcr.io/kexue-aihao/telegram-adblock-transmit:v1.10.0
 LOG_LEVEL=INFO
 ~~~
 
@@ -226,11 +226,13 @@ docker compose -f docker-compose.pull.yml --env-file .env logs --tail=100 bot
 | 命令 | 作用 |
 | --- | --- |
 | `/rule_add <regex>` | 新增一条启用的正则规则 |
+| `/rule_regex` | 回复一条广告消息，自动转换为规则并加入规则库（别名 `/rule_regax`） |
 | `/rule_list` | 列出本群规则和启停状态 |
 | `/rule_remove <规则ID>` | 删除本群规则 |
 | `/rule_enable <规则ID>` | 启用本群规则 |
 | `/rule_disable <规则ID>` | 停用本群规则 |
 | `/rule_test <文本>` | 测试文本命中的规则，不删除测试命令 |
+| `/settings [项] [on\|off]` | 查看运行设置；`bio_check`、`builtin` 开关仅机器人所有者可改 |
 | `/adlog [1-20]` | 查看最近的广告命中审计记录，默认 10 条 |
 
 示例：
@@ -240,6 +242,16 @@ docker compose -f docker-compose.pull.yml --env-file .env logs --tail=100 bot
 /rule_add https?://\S+\.example
 /rule_test 免费领取 https://spam.example
 ~~~
+
+`/rule_regex` 用于把一条漏检的广告快速变成规则：先**回复**那条广告消息，再发送 `/rule_regex`。机器人会按下列方式转换被回复消息，把生成的规则写入本群规则库并立即启用，同时在群里显示规则 ID 和完整正则：
+
+- 保留原文措辞和顺序，去掉表情、标点等装饰，词与词之间允许少量插入字符，因此换个表情或加个分隔符仍能命中；
+- 数字统一变成 `\p{Nd}+`（含全角数字），中文金额（三百、一万）变成数字类，金额和期数变化不影响命中；「千万」「万一」这类词保持原样；
+- 链接替换为通用链接匹配，换域名或换短链仍能命中；
+- `@用户名` 原样保留：把它泛化会让「联系 @某人」变成删除所有留联系方式的消息；
+- 可匹配文字不足 4 个字符（例如只有链接、纯数字或表情）时拒绝生成，请改用 `/rule_add`；超过 512 字符的长广告只保留前半部分并在群里说明。
+
+生成的规则和手工规则一样，可用 `/rule_test` 验证、`/rule_disable <ID>` 停用、`/rule_remove <ID>` 删除。
 
 规则使用 Go RE2 引擎，默认忽略大小写，单条规则最多 512 个 Unicode 字符。RE2 不支持 Python/PCRE 的反向引用、条件表达式和 lookaround。每个群组最多 100 条规则，所有规则合计最多 32768 个字符。
 
@@ -388,6 +400,7 @@ WEBUI_PASSWORD=replace-with-a-long-random-password
 - **规则管理**：全局规则搜索、状态筛选、排序和分页；支持新增、编辑、启停、删除和 JSON 导出。测试匹配及保存均由服务端校验 RE2 正则；编辑未保存时提示确认，操作失败显示原因。通过面板新建的规则创建者为 `-1`。
 - **审计日志**：按群组、日期、删除结果和命中规则筛选，提供日期快捷范围、分页和每页条数选择；支持摘要展开、复制、失败详情及内置库命中解释。数据库保留最多 120 个字符的原文摘要、原文哈希和简短证据标签，不新增完整消息或联系人存储；历史日志缺少详细解释时仍显示原命中 ID。
 - **界面体验**：手机布局、浅色/深色主题、键盘导航、弹窗焦点管理、加载和重试状态；规则及日志筛选条件保留在 URL 中。
+- **运行设置**：在「设置」页开关简介辅助检测、跨群管理权限，并维护机器人所有者用户 ID；与群里 `/settings` 共用同一份配置，保存在 `bot_settings` 表。
 - **账号设置**：在「设置」页修改面板登录用户名和密码。凭据持久化到数据库 `panel_settings` 表（仅存 SHA-256 摘要，不存明文），一旦修改即优先于 `.env` 中的 `WEBUI_USERNAME` / `WEBUI_PASSWORD`；改密后所有已登录会话会退出，需重新登录。
 - **缓存同步**：规则写入后会尝试刷新进程内缓存；新增、修改和启停接口返回缓存失败告警时，面板会提示规则可能尚未生效。规则页刷新按钮重新读取列表；全量缓存重载接口为经过认证的 `POST /api/cache/reload`。
 
@@ -416,7 +429,9 @@ curl -fsS http://127.0.0.1:8080/healthz   # 返回 ok
 | `WEBUI_PASSWORD` | 无 | 面板启用时必需 | 面板登录密码，请使用长随机值 |
 | `WEBUI_SESSION_SECRET` | 无 | 否 | 会话签名密钥；固定后重启不登出，不设则每次重启需重新登录 |
 | `ADFILTER_ENABLED` | `true` | 否 | 内置广告库初始总开关；面板保存的数据库配置优先，关闭内置库不影响自定义规则 |
-| `BIO_CHECK_ENABLED` | `false` | 否 | 简介辅助检测；还需内置库处于开启状态，遵循逐项开关；修改后重新创建 bot 容器 |
+| `BIO_CHECK_ENABLED` | `false` | 否 | 简介辅助检测的初始值；面板或 `/settings` 保存后以数据库配置为准，无需重启 |
+| `BOT_OWNER_IDS` | 空 | 否 | 机器人所有者用户 ID（逗号或空格分隔）；所有者无需是群管理员即可管理机器人并执行 `/settings`，也可在面板中维护 |
+| `NOTICE_TTL` | `10s` | 否 | 删除提示在群里的留存时间，到期由机器人自动删除；设为 `0` 保留提示不自动删除 |
 | `SPAM_STRIKE_LIMIT` | `3` | 否 | 同用户同群在窗口内命中广告次数达到该值即永久封禁踢出；<1 代表关闭 |
 | `SPAM_STRIKE_WINDOW` | `24h` | 否 | 封禁计数的滚动时间窗口 |
 
@@ -424,7 +439,9 @@ curl -fsS http://127.0.0.1:8080/healthz   # 返回 ok
 
 ### 启用简介辅助检测
 
-在 `.env` 中设置 `BIO_CHECK_ENABLED=true`，确认面板中的内置库总开关及所需检测项已开启，然后重新创建 bot 容器（仅 `restart` 不会应用新的环境变量）：
+在面板「设置 → 运行设置」打开「简介辅助检测」，或在群里让机器人所有者发送 `/settings bio_check on`，保存后立即生效、无需重启。也可以用 `.env` 的 `BIO_CHECK_ENABLED=true` 设置初始值（面板或命令保存过配置后，以数据库中的值为准），确认内置库总开关及所需检测项已开启：
+
+首次用环境变量启用时，需要重新创建 bot 容器（仅 `restart` 不会应用新的环境变量）：
 
 ~~~bash
 docker compose -f docker-compose.pull.yml up -d --force-recreate bot
@@ -438,7 +455,14 @@ docker compose -f docker-compose.pull.yml up -d --force-recreate bot
 
 审计保存原消息摘要、规则版本和“消息主动引流／证据来源：用户简介”标签，不保存完整简介。正常日志记录启用状态及命中事件；临时使用 `LOG_LEVEL=DEBUG` 可观察查询的 `available`、`empty`、`unavailable`、`rate_limited`、`server_rate_limited` 状态，日志不输出完整简介。
 
-建议先在测试部署启用，使用可读取简介的测试账号检查组合命中、普通简介不命中，以及无法读取简介时继续处理消息。需要停用时设置 `BIO_CHECK_ENABLED=false` 并重新创建 bot 容器；详细判定说明见[内置广告库管理](docs/builtin-management.md)。
+建议先在测试部署启用，使用可读取简介的测试账号检查组合命中、普通简介不命中，以及无法读取简介时继续处理消息。停用时在面板关闭开关，或让所有者发送 `/settings bio_check off`；详细判定说明见[内置广告库管理](docs/builtin-management.md)。
+
+### 机器人所有者与跨群管理
+
+管理命令默认只对该群管理员开放。两种方式可以突破这一限制：
+
+- **机器人所有者**：在 `BOT_OWNER_IDS` 或面板「设置 → 运行设置」中登记的用户 ID，无需是本群管理员即可管理机器人，并可在任意群执行 `/settings` 修改运行开关。Telegram 不提供查询机器人创建者的接口，因此机器人所有者必须显式配置；不确定自己的 ID 时，在群里发送任意管理命令，权限提示里会附带你的用户 ID。
+- **跨群管理权限**：面板中的开关，打开后非本群管理员也可以执行管理命令。命令文本仍会先经过广告审核，因此不能用「命令前缀 + 广告正文」绕过删除；因为开启后任何群成员都能新增、停用或删除规则（包括写入 `.*` 这类宽泛规则），请只在完全信任群成员时打开，默认关闭。
 
 ## 8. 升级、回滚和备份
 
@@ -446,7 +470,7 @@ docker compose -f docker-compose.pull.yml up -d --force-recreate bot
 
 1. 在 1Panel 中备份 `postgres_data` 卷，并保存 `.env` 的加密副本。
 2. 可选项：如果你计划使用 Web 面板，先在 `.env` 设置 `WEBUI_ADDR`、`WEBUI_USERNAME`、`WEBUI_PASSWORD`（面板默认关闭，不设置不影响升级；启用后缺凭据会导致启动校验失败）。
-3. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.9.1`。也可重新运行一键部署脚本，自动选择最新正式版并完成升级。
+3. 将 `BOT_IMAGE` 改为目标版本，例如 `v1.10.0`。也可重新运行一键部署脚本，自动选择最新正式版并完成升级。
 4. 在编排详情中执行拉取镜像并重新创建/启动服务。
 5. 查看 PostgreSQL 健康状态和 bot 日志，确认 bot 没有反复重启。
 

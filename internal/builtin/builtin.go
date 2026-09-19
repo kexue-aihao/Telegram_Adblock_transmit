@@ -12,7 +12,7 @@ import (
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/ports"
 )
 
-const LibraryVersion = "2.1.0"
+const LibraryVersion = "2.3.0"
 
 // Analysis is also the response used by the non-destructive preview API.
 // Evidence contains fixed labels only, never excerpts or contact information.

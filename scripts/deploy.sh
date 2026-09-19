@@ -184,13 +184,17 @@ if [[ -n "${BIO_CHECK_ENABLED+x}" ]]; then
   [[ "$BIO_CHECK_ENABLED" == true || "$BIO_CHECK_ENABLED" == false ]] || die "BIO_CHECK_ENABLED 必须为 true 或 false。"
   set_key BIO_CHECK_ENABLED "$BIO_CHECK_ENABLED"
 fi
+if [[ -n "${BOT_OWNER_IDS+x}" ]]; then
+  [[ "$BOT_OWNER_IDS" =~ ^[0-9]+([,;[:space:]]+[0-9]+)*$ ]] || die "BOT_OWNER_IDS 必须是逗号或空格分隔的正整数用户 ID。"
+  set_key BOT_OWNER_IDS "$BOT_OWNER_IDS"
+fi
 
 # Credentials from an ambient shell must not override the retained .env during
 # upgrades (especially a different database password). Explicit image/panel/bio
 # choices above are already saved in the staged file.
 compose() {
   env -u BOT_IMAGE -u BOT_TOKEN -u POSTGRES_PASSWORD -u WEBUI_ADDR -u WEBUI_USERNAME \
-    -u WEBUI_PASSWORD -u WEBUI_SESSION_SECRET -u BIO_CHECK_ENABLED \
+    -u WEBUI_PASSWORD -u WEBUI_SESSION_SECRET -u BIO_CHECK_ENABLED -u BOT_OWNER_IDS \
     "${DC[@]}" --project-directory "$DEPLOY_DIR" -p "$PROJECT_NAME" \
     -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
 }
@@ -250,5 +254,7 @@ if [[ "$WEBUI_ENABLE" == 1 ]]; then
   say "面板凭据位于 .env 或已保存的面板设置中。"
 else say "Web 面板未启用；需要时可使用 WEBUI_ENABLE=1 再次运行此脚本。"; fi
 BIO_STATUS="$(get_key BIO_CHECK_ENABLED)"
-say "简介辅助检测：${BIO_STATUS:-false}；可使用 BIO_CHECK_ENABLED=true 再次运行启用。"
+say "简介辅助检测：${BIO_STATUS:-false}（初始值；面板“运行设置”或 /settings 可随时修改）。"
+OWNER_STATUS="$(get_key BOT_OWNER_IDS)"
+say "机器人所有者：${OWNER_STATUS:-未设置}；可在面板“设置 → 运行设置”中维护。"
 say "部署目录：$DEPLOY_DIR（.env 及备份包含机密，请勿外传）"

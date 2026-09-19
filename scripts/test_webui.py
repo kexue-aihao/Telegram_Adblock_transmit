@@ -451,6 +451,48 @@ def run(base_url, output, axe_path=None):
         login()
         passed("account forms, password confirmation and credential-session invalidation")
 
+        visit("settings", ".settings-section")
+        bio = page.get_by_role("switch", name="简介辅助检测", exact=True)
+        cross = page.get_by_role("switch", name="跨群管理权限", exact=True)
+        owners = page.get_by_label("机器人所有者用户 ID", exact=True)
+        # Start from a known state so a reused preview fixture cannot make this
+        # scenario flaky; the suite restores the same state when it finishes.
+        for control in (bio, cross):
+            if control.is_checked():
+                control.click()
+                expect(control).not_to_be_checked()
+
+        bio.click()
+        expect(bio).to_be_checked()
+        expect(page.locator("#toast-region")).to_contain_text("简介辅助检测已开启")
+        # Runtime settings persist, so a reload must show the stored value.
+        page.reload()
+        visit("settings", ".settings-section")
+        expect(page.get_by_role("switch", name="简介辅助检测", exact=True)).to_be_checked()
+
+        cross.click()
+        expect(cross).to_be_checked()
+        expect(page.locator(".settings-controls")).to_contain_text("跨群管理已开启")
+
+        owners.fill("not-a-number")
+        page.get_by_role("button", name="保存所有者", exact=True).click()
+        expect(page.get_by_role("alert")).to_contain_text("正整数")
+        owners.fill("123456789, 987654321")
+        page.get_by_role("button", name="保存所有者", exact=True).click()
+        expect(owners).to_have_value("123456789, 987654321")
+        page.reload()
+        visit("settings", ".settings-section")
+        expect(page.get_by_label("机器人所有者用户 ID", exact=True)).to_have_value("123456789, 987654321")
+
+        # Restore the defaults so later scenarios start from a clean fixture.
+        page.get_by_role("switch", name="简介辅助检测", exact=True).click()
+        page.get_by_role("switch", name="跨群管理权限", exact=True).click()
+        page.get_by_label("机器人所有者用户 ID", exact=True).fill("")
+        page.get_by_role("button", name="保存所有者", exact=True).click()
+        expect(page.get_by_role("switch", name="简介辅助检测", exact=True)).not_to_be_checked()
+        expect(page.get_by_role("switch", name="跨群管理权限", exact=True)).not_to_be_checked()
+        passed("runtime settings toggles, owner list validation and persistence")
+
         page.route("**/api/audit?*", lambda route: route.fulfill(status=401, content_type="application/json",
             body=json.dumps({"error": "未登录或会话已过期。", "code": "unauthorized"})))
         page.get_by_role("link", name="审计日志", exact=True).click()

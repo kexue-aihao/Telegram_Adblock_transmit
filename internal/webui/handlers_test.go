@@ -15,6 +15,7 @@ import (
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/ports"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/rules"
+	botsettings "github.com/kexue-aihao/telegram-adblock-transmit/internal/settings"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/store"
 )
 
@@ -190,10 +191,17 @@ func newTestPanel(t *testing.T, friction error) (*Server, *fakeRuleStore, *fakeP
 	}}
 	refresher := &fakeRefresher{err: friction}
 	settings := &fakePanelSettings{}
+	// A store-backed manager keeps the preview and the handler tests able to
+	// save runtime settings, exactly like the production wiring.
+	botSettings, err := botsettings.NewManager(context.Background(), domain.BotSettings{}, &fakeBotSettingsStore{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	s, err := New(Options{
 		Addr: "127.0.0.1:0", RuleStore: ruleStore, ChatStore: chatStore,
 		AuditStore: audit, Refresher: refresher, SettingsStore: settings,
 		BuiltinFilter: newTestBuiltin(t, &fakeBuiltinSettings{}),
+		BotSettings:   botSettings,
 		Username:      "admin", Password: "hunter2", SessionSecret: []byte("test-secret"),
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -76,6 +77,7 @@ func auditWithPriorHits(message domain.ModerationMessage, count int) *fakeAudit 
 }
 
 type fakeTelegram struct {
+	mu          sync.Mutex
 	admin       bool
 	adminErr    error
 	deleteErr   error
@@ -83,36 +85,65 @@ type fakeTelegram struct {
 	banCalls    []int64
 	banErr      error
 	sends       []fakeSend
+	sendErr     error
+	nextMessage int
 }
 type fakeSend struct {
-	chatID   int64
-	threadID *int
-	text     string
+	chatID    int64
+	threadID  *int
+	text      string
+	messageID int
 }
 
 func (f *fakeTelegram) DeleteMessage(_ context.Context, _ int64, messageID int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.deleteCalls = append(f.deleteCalls, messageID)
 	return f.deleteErr
 }
-func (f *fakeTelegram) SendMessage(_ context.Context, chatID int64, threadID *int, text string) error {
-	f.sends = append(f.sends, fakeSend{chatID: chatID, threadID: threadID, text: text})
-	return nil
+
+// SendMessage hands out sequential message IDs so tests can assert on the
+// follow-up deletion of a moderation notice.
+func (f *fakeTelegram) SendMessage(_ context.Context, chatID int64, threadID *int, text string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.nextMessage++
+	f.sends = append(f.sends, fakeSend{chatID: chatID, threadID: threadID, text: text, messageID: f.nextMessage})
+	return f.nextMessage, f.sendErr
+}
+
+// Accessors keep the scheduled notice cleanup, which runs on a timer
+// goroutine, race-free under -race.
+func (f *fakeTelegram) sentMessages() []fakeSend {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]fakeSend(nil), f.sends...)
+}
+
+func (f *fakeTelegram) deletedMessageIDs() []int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]int(nil), f.deleteCalls...)
 }
 func (f *fakeTelegram) IsGroupAdmin(context.Context, int64, int64) (bool, error) {
 	return f.admin, f.adminErr
 }
 func (f *fakeTelegram) BanChatMember(_ context.Context, _ int64, userID int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.banCalls = append(f.banCalls, userID)
 	return f.banErr
 }
 
 type fakeRules struct {
 	addCalls int
+	added    []domain.NewRule
 }
 
 func (*fakeRules) LoadEnabled(context.Context) (map[int64][]domain.Rule, error) { return nil, nil }
-func (f *fakeRules) Add(context.Context, domain.NewRule) (domain.Rule, error) {
+func (f *fakeRules) Add(_ context.Context, rule domain.NewRule) (domain.Rule, error) {
 	f.addCalls++
+	f.added = append(f.added, rule)
 	return domain.Rule{ID: 1, Enabled: true}, nil
 }
 func (*fakeRules) List(context.Context, int64) ([]domain.Rule, error)   { return nil, nil }
@@ -207,7 +238,7 @@ func TestNonAdminManagementCommandCannotBypassModeration(t *testing.T) {
 	if deleted, err := svc.HandleCommand(context.Background(), message); err != nil || !deleted {
 		t.Fatalf("non-admin command was not moderated: %v, %v", deleted, err)
 	}
-	if len(tg.sends) != 2 || tg.sends[0].text != PermissionNotice || tg.sends[1].text != ModerationNotice {
+	if len(tg.sends) != 2 || !strings.HasPrefix(tg.sends[0].text, PermissionNotice) || tg.sends[1].text != ModerationNotice {
 		t.Fatalf("expected permission and moderation notices, got %+v", tg.sends)
 	}
 	if len(audit.entries) != 1 || len(tg.deleteCalls) != 1 {
@@ -358,8 +389,8 @@ func TestBuiltinFilterDeletesAndAuditsOnSight(t *testing.T) {
 	if len(cache.queries) != 0 {
 		t.Fatalf("rule cache consulted for a builtin hit: %v", cache.queries)
 	}
-	if len(tg.sends) != 1 || tg.sends[0].text != ModerationNotice {
-		t.Fatalf("expected moderation notice, got %+v", tg.sends)
+	if len(tg.sends) != 1 || tg.sends[0].text != BuiltinNotice {
+		t.Fatalf("expected the built-in library notice, got %+v", tg.sends)
 	}
 }
 

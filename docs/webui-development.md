@@ -77,6 +77,8 @@ Checks cover:
 - Failed requests, retries and late responses after navigation.
 - 1440, 768, 390 and 320 pixel layouts, light/dark themes and mobile dialogs.
 - Account validation, credential changes, expired sessions and logout.
+- Runtime settings: profile-check and cross-group switches, owner ID validation,
+  persistence across reloads and the cross-group warning state.
 
 For optional WCAG A/AA checks, install axe-core into an ignored directory:
 
@@ -143,6 +145,11 @@ variable they skip; the preview and browser tests use in-memory storage.
 Audit summaries are limited to 120 characters by the existing store. Expanding
 or copying a summary does not recover the original full message. All API text,
 including patterns and Telegram content, is rendered as text nodes.
+
+`GET /api/bot-settings` returns the profile-check switch, the cross-group
+management switch and the owner user IDs; `PATCH /api/bot-settings` applies a
+partial update and rejects unknown fields, non-positive owner IDs and an empty
+update. Owner IDs are validated and normalized server-side.
 
 `POST /api/builtin-rules/test` accepts `{ "text": "sample message" }` through
 the existing authenticated, CSRF-protected API. It accepts 1–4096 Unicode code

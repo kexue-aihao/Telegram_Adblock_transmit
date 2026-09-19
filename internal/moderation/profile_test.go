@@ -11,6 +11,7 @@ import (
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/builtin"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/profile"
+	botsettings "github.com/kexue-aihao/telegram-adblock-transmit/internal/settings"
 )
 
 type fakeProfiles struct {
@@ -113,6 +114,7 @@ func TestBioModerationEligibilityAndFallback(t *testing.T) {
 			svc := NewService(&fakeRules{}, cache, audit, tg, nil)
 			svc.SetBuiltinFilter(builtin.New(true))
 			svc.SetUserProfileReader(profiles)
+			svc.SetBotSettings(botsettings.NewMemoryManager(domain.BotSettings{BioCheckEnabled: true}))
 			message := testMessage()
 			message.Text = "看我主页"
 			if tc.configure != nil {
@@ -131,7 +133,7 @@ func TestBioModerationEligibilityAndFallback(t *testing.T) {
 					if details == nil || !slices.Contains(audit.entries[0].BuiltinHits, builtin.HitMoneyLaundering) || !strings.Contains(builtinAuditSummary(audit.records[0]), "证据来源：用户简介") {
 						t.Fatalf("missing profile attribution: %+v", audit.entries[0])
 					}
-					if notice := tg.sends[len(tg.sends)-1]; notice.text != ModerationNotice || notice.threadID == nil || *notice.threadID != 77 {
+					if notice := tg.sends[len(tg.sends)-1]; notice.text != BuiltinNotice || notice.threadID == nil || *notice.threadID != 77 {
 						t.Fatalf("wrong notice routing: %+v", notice)
 					}
 				}
@@ -157,6 +159,7 @@ func TestCachedBioUsesCurrentSettings(t *testing.T) {
 	svc := NewService(&fakeRules{}, &fakeCache{}, &fakeAudit{}, &fakeTelegram{}, nil)
 	svc.SetBuiltinFilter(checker)
 	svc.SetUserProfileReader(profile.New(reader, nil))
+	svc.SetBotSettings(botsettings.NewMemoryManager(domain.BotSettings{BioCheckEnabled: true}))
 	message := testMessage()
 	message.Text = "看我主页"
 	for _, enabled := range []bool{true, false, true} {
@@ -193,6 +196,7 @@ func TestBioStrikesAndDeletionFailure(t *testing.T) {
 			svc := NewService(&fakeRules{}, &fakeCache{}, audit, tg, nil)
 			svc.SetBuiltinFilter(builtin.New(true))
 			svc.SetUserProfileReader(&fakeProfiles{bio: "承接洗资业务，联系 @example_agent"})
+			svc.SetBotSettings(botsettings.NewMemoryManager(domain.BotSettings{BioCheckEnabled: true}))
 			svc.SetSpamPolicy(3, 24*time.Hour)
 			message := testMessage()
 			message.Text = "看我主页"
@@ -221,6 +225,7 @@ func TestBioLookupParentCancellationStopsEnforcement(t *testing.T) {
 	svc := NewService(&fakeRules{}, &fakeCache{}, &fakeAudit{}, tg, nil)
 	svc.SetBuiltinFilter(builtin.New(true))
 	svc.SetUserProfileReader(reader)
+	svc.SetBotSettings(botsettings.NewMemoryManager(domain.BotSettings{BioCheckEnabled: true}))
 	message := testMessage()
 	message.Text = "看我主页"
 	if deleted, err := svc.Process(ctx, message); deleted || !errors.Is(err, context.Canceled) || len(tg.deleteCalls) != 0 {

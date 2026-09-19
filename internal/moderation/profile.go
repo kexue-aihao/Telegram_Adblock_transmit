@@ -11,7 +11,7 @@ func (s *Service) matchingBioEntry(ctx context.Context, message domain.Moderatio
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if s.profiles == nil || !s.builtin.Enabled() || message.UserIsBot ||
+	if s.profiles == nil || !s.botSettings().BioCheckEnabled || !s.builtin.Enabled() || message.UserIsBot ||
 		message.UserID == nil || *message.UserID <= 0 || message.SenderChatID != nil ||
 		!builtin.HasProfileSolicitation(message) {
 		return nil, nil

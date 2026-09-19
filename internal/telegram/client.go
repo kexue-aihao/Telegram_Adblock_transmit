@@ -113,18 +113,21 @@ func (c *Client) DeleteMessage(ctx context.Context, chatID int64, messageID int)
 	return err
 }
 
-func (c *Client) SendMessage(ctx context.Context, chatID int64, threadID *int, text string) error {
+// SendMessage posts a message and reports its Telegram message ID so callers
+// can delete the message later. It uses the library request path by default and
+// a context-aware raw request when a custom API endpoint is configured.
+func (c *Client) SendMessage(ctx context.Context, chatID int64, threadID *int, text string) (int, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return 0, err
 	}
 	if c == nil || c.bot == nil {
-		return errors.New("telegram client is nil")
+		return 0, errors.New("telegram client is nil")
 	}
 	if c.bot.Client == nil {
-		return errors.New("telegram HTTP client is nil")
+		return 0, errors.New("telegram HTTP client is nil")
 	}
 	if text == "" {
-		return errors.New("telegram message text is empty")
+		return 0, errors.New("telegram message text is empty")
 	}
 	if c.apiEndpoint == "" {
 		params := tgbotapi.Params{
@@ -136,22 +139,41 @@ func (c *Client) SendMessage(ctx context.Context, chatID int64, threadID *int, t
 		}
 		response, err := c.bot.MakeRequest("sendMessage", params)
 		if err != nil {
-			return redactTelegramError(err, c.bot.Token)
+			return 0, redactTelegramError(err, c.bot.Token)
 		}
 		if response == nil || !response.Ok {
 			if response == nil {
-				return errors.New("telegram sendMessage returned an empty response")
+				return 0, errors.New("telegram sendMessage returned an empty response")
 			}
-			return fmt.Errorf("telegram sendMessage failed: %s", response.Description)
+			return 0, fmt.Errorf("telegram sendMessage failed: %s", response.Description)
 		}
-		return nil
+		return sentMessageID(response.Result), nil
 	}
 	params := url.Values{"chat_id": []string{strconv.FormatInt(chatID, 10)}, "text": []string{text}}
 	if threadID != nil && *threadID > 0 {
 		params.Set("message_thread_id", strconv.Itoa(*threadID))
 	}
-	_, err := c.makeRequest(ctx, "sendMessage", params)
-	return err
+	response, err := c.makeRequest(ctx, "sendMessage", params)
+	if err != nil {
+		return 0, err
+	}
+	return sentMessageID(response.Result), nil
+}
+
+// sentMessageID extracts message_id from a sendMessage result. A response
+// without a usable ID is not an error: the caller simply cannot delete the
+// message afterwards.
+func sentMessageID(result json.RawMessage) int {
+	if len(result) == 0 {
+		return 0
+	}
+	var sent struct {
+		MessageID int `json:"message_id"`
+	}
+	if err := json.Unmarshal(result, &sent); err != nil || sent.MessageID < 0 {
+		return 0
+	}
+	return sent.MessageID
 }
 
 // BanChatMember permanently bans (and kicks) a user, revoking the messages
@@ -338,6 +360,10 @@ func FromMessage(message *tgbotapi.Message, threadID *int) (domain.ModerationMes
 		id := message.SenderChat.ID
 		msg.SenderChatID = &id
 	}
+	if message.ReplyToMessage != nil {
+		quoted := message.ReplyToMessage
+		msg.Reply = replyInfo(quoted.MessageID, quoted.Text, quoted.Caption, quoted.From)
+	}
 	return msg, true
 }
 
@@ -370,6 +396,8 @@ type RawMessage struct {
 	ForwardOrigin   *rawForwardOrigin `json:"forward_origin,omitempty"`
 	ForwardFrom     *tgbotapi.User    `json:"forward_from,omitempty"`
 	ForwardFromChat *tgbotapi.Chat    `json:"forward_from_chat,omitempty"`
+	// ReplyToMessage is kept so /rule_regex can convert the quoted advertisement.
+	ReplyToMessage *RawMessage `json:"reply_to_message,omitempty"`
 }
 
 // rawForwardOrigin mirrors Telegram's forward_origin object, whose type field
@@ -512,6 +540,18 @@ func forwardInfoFrom(origin *rawForwardOrigin, from *tgbotapi.User, fromChat *tg
 	return nil
 }
 
+// replyInfo keeps only the quoted text or caption plus the sender identity.
+// Moderation never reads any other field of the replied message.
+func replyInfo(messageID int, text, caption string, from *tgbotapi.User) *domain.ReplyInfo {
+	info := &domain.ReplyInfo{MessageID: messageID, Text: text, Caption: caption}
+	if from != nil {
+		id := from.ID
+		info.UserID = &id
+		info.SenderIsBot = from.IsBot
+	}
+	return info
+}
+
 // ParseUpdate converts raw Telegram JSON while retaining message_thread_id.
 // It is useful when polling via a transport that exposes raw update payloads.
 func ParseUpdate(data []byte) (domain.ModerationMessage, bool, error) {
@@ -545,6 +585,10 @@ func ParseUpdate(data []byte) (domain.ModerationMessage, bool, error) {
 	if message.SenderChat != nil {
 		id := message.SenderChat.ID
 		msg.SenderChatID = &id
+	}
+	if message.ReplyToMessage != nil {
+		quoted := message.ReplyToMessage
+		msg.Reply = replyInfo(quoted.MessageID, quoted.Text, quoted.Caption, quoted.From)
 	}
 	return msg, true, nil
 }

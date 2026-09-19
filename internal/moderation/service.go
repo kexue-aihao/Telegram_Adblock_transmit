@@ -18,20 +18,33 @@ import (
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/domain"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/ports"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/rules"
+	"github.com/kexue-aihao/telegram-adblock-transmit/internal/settings"
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/store"
 )
 
 const (
 	ModerationNotice = "该消息因匹配广告规则已删除。"
+	// BuiltinNotice names the shipped library explicitly: administrators cannot
+	// see or edit its patterns, so the notice says which layer deleted the
+	// message.
+	BuiltinNotice    = "该信息因匹配内置广告库已删除。"
 	PermissionNotice = "仅本群管理员可以管理广告规则。"
 	DefaultLogLimit  = 10
 	MaxLogLimit      = 20
 	messageChunkSize = 3800
+
+	// DefaultNoticeTTL is how long a deletion notice stays in the group. It is
+	// short on purpose: the notice has done its job once it is read, and group
+	// members should not have to scroll past old moderation chatter.
+	DefaultNoticeTTL = 10 * time.Second
+	// noticeDeletionTimeout bounds the API call that removes an expired notice.
+	noticeDeletionTimeout = 5 * time.Second
 )
 
 var managementCommands = map[string]struct{}{
-	"rule_add": {}, "rule_list": {}, "rule_remove": {}, "rule_enable": {},
-	"rule_disable": {}, "rule_test": {}, "adlog": {},
+	"rule_add": {}, "rule_regex": {}, "rule_regax": {}, "rule_list": {},
+	"rule_remove": {}, "rule_enable": {}, "rule_disable": {}, "rule_test": {},
+	"settings": {}, "adlog": {},
 }
 
 // Service coordinates rule storage, the compiled rule cache, audit storage,
@@ -45,12 +58,17 @@ type Service struct {
 	botUsername string
 	builtin     *builtin.Checker
 	profiles    ports.UserProfileReader
+	settings    *settings.Manager
 
 	// spamStrikeLimit / spamStrikeWindow implement the "three-strike" ban: a
 	// non-admin user whose messages hit rules (or the built-in filter) that
 	// many times within the window is permanently banned.
 	spamStrikeLimit  int
 	spamStrikeWindow time.Duration
+
+	// noticeTTL is how long a deletion notice stays in the group. Zero keeps
+	// notices until an administrator removes them.
+	noticeTTL time.Duration
 }
 
 // NewService builds a moderation service. A nil logger falls back to the
@@ -59,7 +77,10 @@ func NewService(ruleStore ports.RuleStore, cache ports.RuleCache, audit ports.Au
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Service{ruleStore: ruleStore, cache: cache, audit: audit, telegram: telegram, logger: logger}
+	return &Service{
+		ruleStore: ruleStore, cache: cache, audit: audit, telegram: telegram, logger: logger,
+		noticeTTL: DefaultNoticeTTL,
+	}
 }
 
 // SetBotUsername configures the username used to route /command@bot messages.
@@ -81,9 +102,73 @@ func (s *Service) SetBuiltinFilter(filter *builtin.Checker) {
 
 // SetUserProfileReader enables optional bio checks. Configure a bounded,
 // cached reader before polling starts; nil disables all profile requests.
+// Whether the check actually runs is decided per message by the runtime
+// setting (see SetBotSettings), so the panel can switch it on later.
 func (s *Service) SetUserProfileReader(reader ports.UserProfileReader) {
 	if s != nil {
 		s.profiles = reader
+	}
+}
+
+// SetBotSettings attaches the runtime switches edited from the panel or from
+// the /settings command. A nil manager keeps the documented defaults: profile
+// checks off, cross-group management off and no bot owner.
+func (s *Service) SetBotSettings(manager *settings.Manager) {
+	if s != nil {
+		s.settings = manager
+	}
+}
+
+func (s *Service) botSettings() domain.BotSettings {
+	if s == nil {
+		return domain.BotSettings{}
+	}
+	return s.settings.Settings()
+}
+
+// managementRights describes what a sender may do with management commands.
+type managementRights struct {
+	allowed bool
+	// trusted senders are group administrators or bot owners. Only their
+	// command text is exempt from advertising moderation: a sender who is
+	// allowed purely by the cross-group permission still has the message
+	// moderated, so prefixing an advertisement with a command cannot hide it.
+	trusted bool
+}
+
+func (s *Service) managementRights(groupAdmin bool, userID *int64) managementRights {
+	if userID != nil && s.botSettings().IsOwner(*userID) {
+		return managementRights{allowed: true, trusted: true}
+	}
+	if groupAdmin {
+		return managementRights{allowed: true, trusted: true}
+	}
+	if s.botSettings().CrossGroupManagement {
+		return managementRights{allowed: true}
+	}
+	return managementRights{}
+}
+
+// permissionNotice adds the sender's own user ID so the operator can paste it
+// into BOT_OWNER_IDS or the panel without another tool.
+func permissionNotice(message domain.ModerationMessage) string {
+	return PermissionNotice + "\n" + ownerSetupHint(message)
+}
+
+func ownerSetupHint(message domain.ModerationMessage) string {
+	if message.UserID == nil || *message.UserID <= 0 {
+		return "如需授权，请在面板“设置 → 运行设置”或 BOT_OWNER_IDS 中配置机器人所有者。"
+	}
+	return "你的用户 ID：" + strconv.FormatInt(*message.UserID, 10) +
+		"（如需授权，可在面板“设置 → 运行设置”或 BOT_OWNER_IDS 中把该 ID 设为机器人所有者）"
+}
+
+// SetNoticeTTL configures how long a deletion notice stays in the group before
+// the bot removes it. Zero or less keeps notices until an administrator deletes
+// them. Removing a notice is best effort and never changes the moderation result.
+func (s *Service) SetNoticeTTL(ttl time.Duration) {
+	if s != nil {
+		s.noticeTTL = ttl
 	}
 }
 
@@ -257,7 +342,7 @@ func (s *Service) matchingEntry(ctx context.Context, message domain.ModerationMe
 				admin = false
 			}
 		}
-		if admin {
+		if rights := s.managementRights(admin, message.UserID); rights.allowed && rights.trusted {
 			return nil, nil
 		}
 	}
@@ -324,9 +409,7 @@ func (s *Service) enforce(ctx context.Context, message domain.ModerationMessage,
 		s.maybeBanSpammer(ctx, message, *entry.UserID)
 	}
 	if deleteSucceeded && s.telegram != nil {
-		if err := s.telegram.SendMessage(ctx, message.ChatID, message.MessageThreadID, ModerationNotice); err != nil {
-			s.logger.Warn("unable to send moderation notice", "chat_id", message.ChatID, "message_id", message.MessageID, "error", err)
-		}
+		s.sendModerationNotice(ctx, message, moderationNoticeText(entry))
 	}
 	if auditErr != nil {
 		return deleteSucceeded, auditErr
@@ -391,14 +474,25 @@ func (s *Service) HandleCommand(ctx context.Context, message domain.ModerationMe
 			s.logger.Warn("unable to determine group administrator", "chat_id", message.ChatID, "user_id", *message.UserID, "error", err)
 		}
 	}
-	if !admin {
-		_ = s.send(ctx, message, PermissionNotice)
+	rights := s.managementRights(admin, message.UserID)
+	if !rights.allowed {
+		_ = s.send(ctx, message, permissionNotice(message))
 		return s.process(ctx, message, &admin)
+	}
+	if !rights.trusted {
+		// Allowed by the cross-group permission only: the command still runs,
+		// but its text goes through moderation first so an advertisement cannot
+		// hide behind a command prefix.
+		if deleted, err := s.process(ctx, message, &admin); err != nil || deleted {
+			return deleted, err
+		}
 	}
 
 	switch name {
 	case "rule_add":
 		return s.commandAdd(ctx, message, args)
+	case "rule_regex", "rule_regax":
+		return s.commandRegex(ctx, message)
 	case "rule_list":
 		return s.commandList(ctx, message)
 	case "rule_remove":
@@ -409,6 +503,8 @@ func (s *Service) HandleCommand(ctx context.Context, message domain.ModerationMe
 		return s.commandSetEnabled(ctx, message, args, false)
 	case "rule_test":
 		return s.commandTest(ctx, message, args)
+	case "settings":
+		return s.commandSettings(ctx, message, args)
 	case "adlog":
 		return s.commandLog(ctx, message, args)
 	default:
@@ -444,6 +540,165 @@ func (s *Service) commandAdd(ctx context.Context, message domain.ModerationMessa
 		return false, err
 	}
 	return false, s.send(ctx, message, fmt.Sprintf("规则 #%d 已启用。", rule.ID))
+}
+
+// ruleRegexUsage is returned when the administrator did not reply to anything.
+// The alias is listed because /rule_regax is accepted as well.
+const ruleRegexUsage = "用法：回复一条广告消息，再发送 /rule_regex（别名 /rule_regax）。" +
+	"机器人会把被回复消息转换成正则规则并加入本群规则库。"
+
+const settingsUsage = "用法：/settings 查看当前运行设置；" +
+	"/settings bio_check on|off 开关简介辅助检测；/settings builtin on|off 开关内置广告库。修改仅限机器人所有者。"
+
+// commandSettings reads and updates the runtime switches. These switches are
+// global, so only bot owners may change them; group administrators and other
+// managers can still read the current values from the same command.
+func (s *Service) commandSettings(ctx context.Context, message domain.ModerationMessage, args string) (bool, error) {
+	fields := strings.Fields(args)
+	if len(fields) == 0 {
+		return false, s.sendChunks(ctx, message, s.settingsReport())
+	}
+	if len(fields) != 2 {
+		return false, s.send(ctx, message, settingsUsage)
+	}
+	value, ok := parseToggle(fields[1])
+	if !ok {
+		return false, s.send(ctx, message, "开关值只能是 on 或 off。")
+	}
+	if message.UserID == nil || !s.botSettings().IsOwner(*message.UserID) {
+		return false, s.send(ctx, message, "只有机器人所有者可以修改运行设置。"+ownerSetupHint(message))
+	}
+	switch strings.ToLower(fields[0]) {
+	case "bio_check":
+		if _, err := s.settings.SetBioCheck(ctx, value); err != nil {
+			s.logger.Error("unable to save bio check setting", "error", err)
+			return false, s.send(ctx, message, "保存设置失败，请稍后重试。")
+		}
+		s.logger.Info("bio check setting changed from chat", "user_id", *message.UserID, "enabled", value)
+		return false, s.send(ctx, message, "简介辅助检测已"+onOffLabel(value)+"。")
+	case "builtin":
+		if s.builtin == nil {
+			return false, s.send(ctx, message, "内置广告库尚未配置。")
+		}
+		if _, err := s.builtin.Update(ctx, &value, nil); err != nil {
+			s.logger.Error("unable to save builtin master switch", "error", err)
+			return false, s.send(ctx, message, "保存设置失败，请稍后重试。")
+		}
+		s.logger.Info("builtin master switch changed from chat", "user_id", *message.UserID, "enabled", value)
+		return false, s.send(ctx, message, "内置广告库总开关已"+onOffLabel(value)+"。")
+	default:
+		return false, s.send(ctx, message, settingsUsage)
+	}
+}
+
+// settingsReport lists the runtime switches and where each one is edited. It
+// never includes credentials or message content.
+func (s *Service) settingsReport() []string {
+	current := s.botSettings()
+	library := "未配置"
+	if s.builtin != nil {
+		library = onOffLabel(s.builtin.Enabled())
+	}
+	bio := onOffLabel(current.BioCheckEnabled)
+	if current.BioCheckEnabled && s.profiles == nil {
+		bio += "（尚未配置资料读取，暂不生效）"
+	}
+	access := "仅群管理员与机器人所有者"
+	if current.CrossGroupManagement {
+		access = "非群管理员也可以管理（跨群管理已开启）"
+	}
+	owners := "未设置"
+	if len(current.OwnerUserIDs) > 0 {
+		ids := make([]string, len(current.OwnerUserIDs))
+		for i, id := range current.OwnerUserIDs {
+			ids[i] = strconv.FormatInt(id, 10)
+		}
+		owners = strings.Join(ids, "、")
+	}
+	return []string{
+		"当前运行设置（对所有群组生效）",
+		"内置广告库：" + library,
+		"简介辅助检测：" + bio,
+		"管理权限：" + access,
+		"机器人所有者：" + owners,
+		"",
+		"修改：/settings bio_check on|off、/settings builtin on|off（仅机器人所有者）",
+		"跨群管理权限与所有者名单在面板“设置 → 运行设置”中修改。",
+	}
+}
+
+func onOffLabel(enabled bool) string {
+	if enabled {
+		return "开启"
+	}
+	return "关闭"
+}
+
+func parseToggle(raw string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "on", "true", "1", "enable", "enabled", "开", "开启", "启用":
+		return true, true
+	case "off", "false", "0", "disable", "disabled", "关", "关闭", "停用":
+		return false, true
+	}
+	return false, false
+}
+
+// commandRegex derives a rule from the replied message. The derived pattern is
+// always validated and always matches the message it came from, so a stored
+// rule cannot silently miss its own sample. The conversion result is posted in
+// the group so the administrator can see and immediately disable it.
+func (s *Service) commandRegex(ctx context.Context, message domain.ModerationMessage) (bool, error) {
+	if message.Reply == nil || strings.TrimSpace(message.Reply.Content()) == "" {
+		return false, s.send(ctx, message, ruleRegexUsage)
+	}
+	source := message.Reply.Content()
+	pattern, truncated, err := rules.DerivePattern(source)
+	if err != nil {
+		return false, s.send(ctx, message, "无法转换为规则："+err.Error())
+	}
+	if s.ruleStore == nil {
+		return false, errors.New("rule store is nil")
+	}
+	rule, err := s.ruleStore.Add(ctx, domain.NewRule{
+		ChatID: message.ChatID, ChatTitle: message.ChatTitle,
+		Pattern: pattern, CreatedBy: userID(message),
+	})
+	if err != nil {
+		if errors.Is(err, store.ErrRuleLimitExceeded) {
+			_ = s.send(ctx, message, "本群规则数量或总长度已达到上限。")
+		} else {
+			_ = s.send(ctx, message, "无法保存规则，请稍后重试。")
+		}
+		return false, nil
+	}
+	if err := s.refreshCacheWithRetry(ctx, message.ChatID); err != nil {
+		s.logger.Error("unable to refresh rule cache", "chat_id", message.ChatID, "error", err)
+		if s.cache != nil {
+			s.cache.Remove(message.ChatID)
+		}
+		_ = s.send(ctx, message, fmt.Sprintf("规则 #%d 已保存，但缓存刷新失败，请稍后重试。", rule.ID))
+		return false, err
+	}
+	s.logger.Info("rule derived from replied message", "chat_id", message.ChatID, "rule_id", rule.ID, "truncated", truncated)
+	return false, s.sendChunks(ctx, message, derivedRuleReport(rule.ID, pattern, truncated))
+}
+
+// derivedRuleReport renders the conversion result. It never echoes the quoted
+// advertisement back into the group: only the pattern and its rule ID are shown.
+func derivedRuleReport(id int64, pattern string, truncated bool) []string {
+	lines := []string{
+		fmt.Sprintf("已根据被回复消息生成规则 #%d 并启用：", id),
+		pattern,
+	}
+	if truncated {
+		lines = append(lines, "原文较长，规则只保留前半部分；如需覆盖全文请用 /rule_add 手动编写。")
+	}
+	lines = append(lines,
+		"数字已泛化为 \\p{Nd}+，链接已替换为通用链接，@用户名保持原样。",
+		fmt.Sprintf("可用 /rule_test <文本> 验证，/rule_disable %d 停用，/rule_remove %d 删除。", id, id),
+	)
+	return lines
 }
 
 func (s *Service) commandList(ctx context.Context, message domain.ModerationMessage) (bool, error) {
@@ -659,11 +914,46 @@ func (s *Service) refreshCacheWithRetry(ctx context.Context, chatID int64) error
 	return lastErr
 }
 
+// moderationNoticeText keeps the explanation aligned with what actually
+// matched. A message that hit both layers reports the built-in library, because
+// that is the part administrators cannot inspect themselves.
+func moderationNoticeText(entry domain.NewAuditEntry) string {
+	if len(entry.BuiltinHits) > 0 {
+		return BuiltinNotice
+	}
+	return ModerationNotice
+}
+
+// sendModerationNotice posts the deletion notice and schedules its removal.
+// The timer is deliberately independent of the update context: a notice may
+// outlive the polling request that produced it.
+func (s *Service) sendModerationNotice(ctx context.Context, message domain.ModerationMessage, text string) {
+	noticeID, err := s.telegram.SendMessage(ctx, message.ChatID, message.MessageThreadID, text)
+	if err != nil {
+		s.logger.Warn("unable to send moderation notice", "chat_id", message.ChatID, "message_id", message.MessageID, "error", err)
+		return
+	}
+	if s.noticeTTL <= 0 || noticeID <= 0 {
+		return
+	}
+	chatID := message.ChatID
+	time.AfterFunc(s.noticeTTL, func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), noticeDeletionTimeout)
+		defer cancel()
+		if err := s.telegram.DeleteMessage(cleanupCtx, chatID, noticeID); err != nil {
+			s.logger.Warn("unable to delete moderation notice", "chat_id", chatID, "notice_id", noticeID, "error", err)
+		}
+	})
+}
+
+// send is used for command replies, which stay in the group until an
+// administrator removes them.
 func (s *Service) send(ctx context.Context, message domain.ModerationMessage, text string) error {
 	if s.telegram == nil {
 		return errors.New("telegram client is nil")
 	}
-	return s.telegram.SendMessage(ctx, message.ChatID, message.MessageThreadID, text)
+	_, err := s.telegram.SendMessage(ctx, message.ChatID, message.MessageThreadID, text)
+	return err
 }
 
 func (s *Service) sendChunks(ctx context.Context, message domain.ModerationMessage, lines []string) error {

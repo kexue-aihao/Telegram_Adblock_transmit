@@ -26,6 +26,8 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ADFILTER_ENABLED: ${ADFILTER_ENABLED:-true}
       BIO_CHECK_ENABLED: ${BIO_CHECK_ENABLED:-false}
+      BOT_OWNER_IDS: ${BOT_OWNER_IDS:-}
+      NOTICE_TTL: ${NOTICE_TTL:-10s}
       # Web 管理面板（可选）。WEBUI_ADDR 留空则禁用；启用时需同时设置用户名和密码。
       WEBUI_ADDR: ${WEBUI_ADDR:-}
       WEBUI_USERNAME: ${WEBUI_USERNAME:-}

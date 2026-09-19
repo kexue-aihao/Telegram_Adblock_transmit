@@ -13,6 +13,10 @@ import (
 
 const defaultTelegramHTTPTimeout = 30 * time.Second
 
+// defaultNoticeTTL mirrors moderation.DefaultNoticeTTL: the deletion notice is
+// removed after this delay unless NOTICE_TTL overrides it.
+const defaultNoticeTTL = 10 * time.Second
+
 type Config struct {
 	BotToken            string
 	DatabaseURL         string
@@ -36,7 +40,19 @@ type Config struct {
 	// It defaults to true so protection is on out of the box.
 	AdFilterEnabled bool
 	// BioCheckEnabled opts into profile-assisted checks of solicitation messages.
+	// It provides the initial value; once an administrator saves settings from
+	// the panel or from /settings, the stored value takes precedence.
 	BioCheckEnabled bool
+	// BotOwnerIDs are Telegram user IDs that may manage the bot in every group,
+	// including groups where they are not an administrator. Telegram offers no
+	// API to query the bot creator, so the operator lists their own ID here (or
+	// saves it from the panel).
+	BotOwnerIDs []int64
+
+	// NoticeTTL is how long the "message deleted" notice stays in the group
+	// before the bot removes it. Zero keeps notices until an administrator
+	// deletes them.
+	NoticeTTL time.Duration
 
 	// SpamStrikeLimit is the number of ad hits (per user, per chat, within
 	// SpamStrikeWindow, built-in or user-rule) that permanently bans the user.
@@ -85,11 +101,23 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	cfg.BotOwnerIDs, err = parseOwnerIDs(os.Getenv("BOT_OWNER_IDS"))
+	if err != nil {
+		return Config{}, err
+	}
 	if err := validateTelegramAPIEndpoint(cfg.TelegramAPIEndpoint, allowInsecureHTTP); err != nil {
 		return Config{}, err
 	}
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "INFO"
+	}
+	cfg.NoticeTTL = defaultNoticeTTL
+	if raw := os.Getenv("NOTICE_TTL"); raw != "" {
+		ttl, err := time.ParseDuration(raw)
+		if err != nil || ttl < 0 {
+			return Config{}, fmt.Errorf("NOTICE_TTL must be a non-negative duration such as 10s or 0: %q", raw)
+		}
+		cfg.NoticeTTL = ttl
 	}
 	cfg.SpamStrikeLimit = intEnv("SPAM_STRIKE_LIMIT", 3)
 	cfg.SpamStrikeWindow = 24 * time.Hour
@@ -169,6 +197,22 @@ func parseBoolEnv(name string) (bool, error) {
 		return false, fmt.Errorf("%s must be true or false", name)
 	}
 	return value, nil
+}
+
+// parseOwnerIDs reads a comma, semicolon or space separated list of Telegram
+// user IDs. An empty value disables the owner fallback until the panel saves
+// one.
+func parseOwnerIDs(raw string) ([]int64, error) {
+	fields := strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ';' || r <= ' ' })
+	ids := make([]int64, 0, len(fields))
+	for _, field := range fields {
+		id, err := strconv.ParseInt(field, 10, 64)
+		if err != nil || id <= 0 {
+			return nil, fmt.Errorf("BOT_OWNER_IDS entries must be positive Telegram user IDs, got %q", field)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 func validateTelegramAPIEndpoint(endpoint string, allowInsecureHTTP bool) error {

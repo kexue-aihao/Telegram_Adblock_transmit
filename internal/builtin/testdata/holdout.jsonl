@@ -36,3 +36,23 @@
 {"id":"h036","family":"whole_ad_quotation","kind":"adversarial","text":"「听话水现货供应，立即购买」","want":["ad_aphrodisiac_trade"]}
 {"id":"h037","family":"medical_url_reference","kind":"negative","text":"论文出处 https://journal.example.invalid/papers/ghb-for-sale-risk","want":[]}
 {"id":"h038","family":"latin_benign_suffix","kind":"negative","text":"这是 alphabet 测试，aphrodisiacal 是英语形容词，for sale 是另一个例句","want":[]}
+{"id":"h039","family":"fleet_rate_bulletin","kind":"positive","text":"车队跑分，笔笔善后，免风控，点位高，联系 @sample_agent","want":["ad_laundering_slang"]}
+{"id":"h040","family":"fleet_rate_bulletin","kind":"positive","text":"押车业务长期收人，包吃住，按点结算 @sample_agent","want":["ad_laundering_slang"]}
+{"id":"h041","family":"material_collection_notice","kind":"positive","text":"招拍照采集人员，人脸认证兼职，报销路费，联系 @sample_agent","want":["ad_identity_recruit"]}
+{"id":"h042","family":"material_collection_notice","kind":"positive","text":"白纸手持拍照兼职，一单五十，长期要人 @sample_agent","want":["ad_identity_recruit"]}
+{"id":"h043","family":"outcall_hours","kind":"positive","text":"24小时上门，技师服务，快餐包夜，联系 @sample_agent","want":["ad_sexual_slang"]}
+{"id":"h044","family":"account_supply_list","kind":"positive","text":"成品号实名号批发，老群资源转让，报价私聊 @sample_agent","want":["ad_group_resource_trade"]}
+{"id":"h045","family":"convoy_schedule","kind":"negative","text":"骑行活动车队集合时间改为周日早上七点。","want":[]}
+{"id":"h046","family":"convoy_schedule","kind":"negative","text":"物流园区车队调度通知：本周排班已更新。","want":[]}
+{"id":"h047","family":"club_recruitment","kind":"negative","text":"学校社团招新，摄影组负责活动拍照，欢迎报名。","want":[]}
+{"id":"h048","family":"neighbour_chat","kind":"negative","text":"业主老群搬家了，新群二维码在公告里。","want":[]}
+{"id":"h049","family":"venue_maintenance","kind":"negative","text":"KTV 门店上门调音服务，联系值班工程师。","want":[]}
+{"id":"h050","family":"venue_maintenance","kind":"negative","text":"会所年会场地预订，联系电话在前台公告。","want":[]}
+{"id":"h051","family":"court_digest","kind":"negative","text":"法院判决书披露，被告人以马车、汇率11招揽卡农，判处有期徒刑。","want":[]}
+{"id":"h052","family":"workplace_notice","kind":"negative","text":"公司考勤系统升级，员工刷脸认证，人脸采集信息仅用于打卡。","want":[]}
+{"id":"h053","family":"traffic_package_offer","kind":"positive","text":"站群引流套餐，批量群发，支持USDT结算 @sample_agent","want":["ad_bulk_posting"]}
+{"id":"h054","family":"idle_project_offer","kind":"positive","text":"全自动挂机项目，月入过万，名额有限，加群了解","want":["ad_idle_project"]}
+{"id":"h055","family":"device_wholesale","kind":"positive","text":"日版有锁手机批发，卡贴机现货，拿货价出 @sample_agent","want":["ad_grey_market"]}
+{"id":"h056","family":"shop_stock_notice","kind":"negative","text":"手机店进货通知：本周配件到货时间调整。","want":[]}
+{"id":"h057","family":"shop_stock_notice","kind":"negative","text":"代理商大会报名开始，欢迎门店参加。","want":[]}
+{"id":"h058","family":"marketing_talk","kind":"negative","text":"这期讲讲广告投放的结算方式和平台规则。","want":[]}

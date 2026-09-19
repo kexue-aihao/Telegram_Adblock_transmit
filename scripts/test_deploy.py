@@ -106,7 +106,7 @@ class DeployTests(unittest.TestCase):
             target.write_text(content, encoding="utf-8", newline="\n")
             target.chmod(0o700)
         self.env = os.environ.copy()
-        for key in ("BOT_TOKEN", "POSTGRES_PASSWORD", "WEBUI_ENABLE", "WEBUI_ADDR", "WEBUI_USERNAME", "WEBUI_PASSWORD", "WEBUI_SESSION_SECRET", "BIO_CHECK_ENABLED", "BOT_IMAGE", "RAW_BASE", "RELEASE_VERSION", "COMPOSE_PROJECT_NAME", "BASH_ENV"):
+        for key in ("BOT_TOKEN", "POSTGRES_PASSWORD", "WEBUI_ENABLE", "WEBUI_ADDR", "WEBUI_USERNAME", "WEBUI_PASSWORD", "WEBUI_SESSION_SECRET", "BIO_CHECK_ENABLED", "BOT_OWNER_IDS", "BOT_IMAGE", "RAW_BASE", "RELEASE_VERSION", "COMPOSE_PROJECT_NAME", "BASH_ENV"):
             self.env.pop(key, None)
         self.env.update(DEPLOY_DIR=self.deploy.as_posix(), MOCK_DIR=self.base.as_posix(), MOCK_SOURCE=ROOT.as_posix())
         # Bash receives PATH after converting its own Windows environment.
@@ -183,6 +183,17 @@ class DeployTests(unittest.TestCase):
         self.assertEqual(self.values()["BIO_CHECK_ENABLED"], "false")
         self.assertEqual(self.values()["WEBUI_ADDR"], "")
         self.assertNotIn("releases/latest", self.log("curl.log"))
+
+    def test_owner_ids_are_validated_and_saved(self):
+        self.existing()
+        self.env.update(BOT_OWNER_IDS="123456789, 987654321")
+        self.run_deploy()
+        self.assertEqual(self.values()["BOT_OWNER_IDS"], "123456789, 987654321")
+
+        self.env.update(BOT_OWNER_IDS="not-a-number")
+        result = self.run_deploy(ok=False)
+        self.assertIn("BOT_OWNER_IDS", result.stdout + result.stderr)
+        self.assertNotIn("not-a-number", (self.deploy / ".env").read_text(encoding="utf-8"))
 
     def test_explicit_release_and_legacy_compose(self):
         self.existing()

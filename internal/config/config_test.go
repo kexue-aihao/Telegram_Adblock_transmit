@@ -24,6 +24,73 @@ func TestBioCheckOptIn(t *testing.T) {
 	}
 }
 
+func TestNoticeTTLDefaultAndOverride(t *testing.T) {
+	t.Setenv("BOT_TOKEN", "token")
+	t.Setenv("DATABASE_URL", "postgres://localhost/db")
+	t.Setenv("NOTICE_TTL", "")
+	cfg, err := Load()
+	if err != nil || cfg.NoticeTTL != 10*time.Second {
+		t.Fatalf("default NOTICE_TTL = %v, error %v", cfg.NoticeTTL, err)
+	}
+	for _, tc := range []struct {
+		value   string
+		want    time.Duration
+		invalid bool
+	}{
+		{"30s", 30 * time.Second, false},
+		{"0", 0, false},
+		{"2m", 2 * time.Minute, false},
+		{"-5s", 0, true},
+		{"soon", 0, true},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Setenv("NOTICE_TTL", tc.value)
+			cfg, err := Load()
+			if (err != nil) != tc.invalid {
+				t.Fatalf("NOTICE_TTL=%q error = %v", tc.value, err)
+			}
+			if !tc.invalid && cfg.NoticeTTL != tc.want {
+				t.Fatalf("NOTICE_TTL=%q = %v, want %v", tc.value, cfg.NoticeTTL, tc.want)
+			}
+		})
+	}
+}
+
+func TestBotOwnerIDsParsing(t *testing.T) {
+	t.Setenv("BOT_TOKEN", "token")
+	t.Setenv("DATABASE_URL", "postgres://localhost/db")
+	for _, tc := range []struct {
+		value   string
+		want    []int64
+		invalid bool
+	}{
+		{"", nil, false},
+		{"123456789", []int64{123456789}, false},
+		{"123456789, 987654321", []int64{123456789, 987654321}, false},
+		{"123456789;987654321 555", []int64{123456789, 987654321, 555}, false},
+		{"abc", nil, true},
+		{"0", nil, true},
+		{"-5", nil, true},
+		{"123,abc", nil, true},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Setenv("BOT_OWNER_IDS", tc.value)
+			cfg, err := Load()
+			if (err != nil) != tc.invalid {
+				t.Fatalf("BOT_OWNER_IDS=%q: error = %v", tc.value, err)
+			}
+			if len(cfg.BotOwnerIDs) != len(tc.want) {
+				t.Fatalf("BOT_OWNER_IDS=%q parsed %v, want %v", tc.value, cfg.BotOwnerIDs, tc.want)
+			}
+			for i, id := range tc.want {
+				if cfg.BotOwnerIDs[i] != id {
+					t.Fatalf("BOT_OWNER_IDS=%q parsed %v, want %v", tc.value, cfg.BotOwnerIDs, tc.want)
+				}
+			}
+		})
+	}
+}
+
 func TestLoadUsesOfficialTelegramEndpointByDefault(t *testing.T) {
 	t.Setenv("BOT_TOKEN", "token")
 	t.Setenv("DATABASE_URL", "postgres://localhost/db")

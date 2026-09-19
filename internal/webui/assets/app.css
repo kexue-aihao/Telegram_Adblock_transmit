@@ -335,6 +335,15 @@ summary { color: var(--accent); cursor: pointer; font-size: 12px; padding: 6px 0
 .settings-sections { max-width: 1000px; }
 .settings-section { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(280px, 1.5fr); gap: 40px; padding: 28px 0; }
 .settings-section .field { margin-bottom: 18px; }
+/* Runtime switches: the description stays readable while the control keeps its
+   size, matching the built-in library rows. */
+.settings-controls { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.settings-toggle { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.settings-toggle > div { min-width: 0; }
+.settings-toggle h3 { font-size: 14px; margin-bottom: 6px; }
+.settings-toggle p { margin: 0; }
+.settings-toggle .switch { flex-shrink: 0; }
+.settings-toggle .notice { margin-top: 10px; }
 .login-wrap { display: flex; justify-content: center; align-items: center; min-height: calc(100dvh - 172px); }
 .login-form { width: 432px; max-width: 100%; padding: 36px; border: 1px solid var(--border); border-radius: var(--radius-modal); background: var(--glass); box-shadow: var(--glass-shadow); -webkit-backdrop-filter: blur(var(--blur)); backdrop-filter: blur(var(--blur)); }
 .login-form h1 { margin: 12px 0; font-size: 26px; }

@@ -106,6 +106,7 @@ type ModerationMessage struct {
 	Entities        []MessageEntityInfo
 	InlineButtons   []InlineButtonInfo
 	Forward         *ForwardInfo
+	Reply           *ReplyInfo
 }
 
 func (m ModerationMessage) Content() string {
@@ -113,4 +114,22 @@ func (m ModerationMessage) Content() string {
 		return m.Text
 	}
 	return m.Caption
+}
+
+// ReplyInfo is the quoted message an administrator replied to. Only the text
+// or caption is retained: rule authoring converts that content into a pattern
+// and no other field of the quoted message participates.
+type ReplyInfo struct {
+	MessageID   int
+	Text        string
+	Caption     string
+	UserID      *int64
+	SenderIsBot bool
+}
+
+func (r ReplyInfo) Content() string {
+	if r.Text != "" {
+		return r.Text
+	}
+	return r.Caption
 }

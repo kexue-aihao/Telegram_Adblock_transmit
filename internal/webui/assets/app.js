@@ -1099,6 +1099,8 @@ async function renderSettings(view) {
   try {
     const account = await api("/api/settings/account");
     if (!view.isConnected) return;
+    let bot = null;
+    try { bot = await api("/api/bot-settings"); } catch (err) { bot = null; }
     const username = el("input", { id: "set-user", name: "username", value: account.username, autocomplete: "username", spellcheck: "false",
       required: true, maxlength: "64", pattern: "[A-Za-z0-9_.\\-]{1,64}" });
     const userError = el("div");
@@ -1131,10 +1133,87 @@ async function renderSettings(view) {
         } catch (err) { passwordError.append(notice(err.message)); current.focus(); }
       });
     });
+    // Runtime switches shared with the bot. They are global, so every control
+    // here states that explicitly and rolls back when the save fails.
+    const runtimeSection = (() => {
+      if (!bot) {
+        return el("section", { class: "section settings-section" },
+          el("div", null, el("h2", null, "运行设置"), el("p", { class: "hint" }, "检测与权限开关。")),
+          notice("运行设置接口不可用，请刷新页面或检查服务状态。", "warn"));
+      }
+      const controls = el("div", { class: "settings-controls" });
+      const toggleRow = (id, label, hint, checked, save) => {
+        const error = el("div");
+        const status = el("span", { class: "status-label" }, checked ? "已开启" : "已关闭");
+        const input = el("input", { type: "checkbox", role: "switch", id, checked, "aria-label": label });
+        input.addEventListener("change", async () => {
+          const next = input.checked;
+          empty(error);
+          input.disabled = true;
+          try {
+            await save(next);
+            status.textContent = next ? "已开启" : "已关闭";
+            toast(label + (next ? "已开启。" : "已关闭。"));
+          } catch (err) {
+            input.checked = !next;
+            status.textContent = !next ? "已开启" : "已关闭";
+            error.append(notice(err.message));
+          } finally { input.disabled = false; }
+        });
+        return el("div", { class: "settings-toggle" },
+          el("div", null, el("h3", null, label), el("p", { class: "hint" }, hint), error),
+          el("label", { class: "switch", for: id }, input, el("span", { class: "track", "aria-hidden": "true" }), status));
+      };
+      const patch = (body) => api("/api/bot-settings", { method: "PATCH", body });
+      const crossWarning = el("div");
+      const paintCrossWarning = () => {
+        empty(crossWarning);
+        if (bot && bot.cross_group_management) {
+          crossWarning.append(notice("跨群管理已开启：任何群成员都可以新增、删除或停用规则，请仅在完全信任群成员时使用。", "warn"));
+        }
+      };
+      controls.append(
+        toggleRow("set-bio-check", "简介辅助检测", "开启后，对“看我主页”等主动引流消息查询发送者简介；简介独立命中内置库才删除。", bot.bio_check_enabled,
+          async (enabled) => { bot = await patch({ bio_check_enabled: enabled }); }),
+        toggleRow("set-cross-group", "跨群管理权限", "开启后，非本群管理员也可以执行管理命令（命令文本仍会被广告规则审核）。默认关闭。", bot.cross_group_management,
+          async (enabled) => { bot = await patch({ cross_group_management: enabled }); paintCrossWarning(); }),
+        crossWarning);
+      paintCrossWarning();
+      const ownerInput = el("input", { id: "set-owner-ids", name: "owner_user_ids", autocomplete: "off", spellcheck: "false",
+        inputmode: "numeric", placeholder: "例如：123456789, 987654321", value: (bot.owner_user_ids || []).join(", ") });
+      const ownerError = el("div");
+      const saveOwners = button("保存所有者", "check", null, { type: "submit", class: "btn primary" });
+      const ownerForm = el("form", null,
+        field("机器人所有者用户 ID", ownerInput, "逗号或空格分隔。所有者无需是本群管理员即可管理机器人，并可在群里用 /settings 修改运行开关。"),
+        ownerError, saveOwners);
+      ownerForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const ids = ownerInput.value.split(/[\s,;]+/).filter(Boolean).map((raw) => Number(raw));
+        if (ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+          empty(ownerError).append(notice("所有者必须是正整数 Telegram 用户 ID。"));
+          ownerInput.focus();
+          return;
+        }
+        busy(saveOwners, "保存中…", async () => {
+          empty(ownerError);
+          try {
+            bot = await patch({ owner_user_ids: ids });
+            ownerInput.value = (bot.owner_user_ids || []).join(", ");
+            toast("所有者名单已更新。");
+          } catch (err) { ownerError.append(notice(err.message)); ownerInput.focus(); }
+        });
+      });
+      controls.append(ownerForm);
+      return el("section", { class: "section settings-section" },
+        el("div", null, el("h2", null, "运行设置"),
+          el("p", { class: "hint" }, "对所有群组生效。群管理员也可以在群里用 /settings 查看。")),
+        controls);
+    })();
     empty(view).append(pageHeader("设置", "当前登录：" + account.username),
       el("div", { class: "settings-sections" },
         el("section", { class: "section settings-section" }, el("div", null, el("h2", null, "登录账号"), el("p", { class: "hint" }, "修改后需要重新登录。")), accountForm),
-        el("section", { class: "section settings-section" }, el("div", null, el("h2", null, "登录密码"), el("p", { class: "hint" }, "修改后所有现有会话将退出。")), passwordForm)));
+        el("section", { class: "section settings-section" }, el("div", null, el("h2", null, "登录密码"), el("p", { class: "hint" }, "修改后所有现有会话将退出。")), passwordForm),
+        runtimeSection));
   } catch (err) { renderError(view, err, () => renderView()); }
 }
 async function boot() {

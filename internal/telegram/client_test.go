@@ -106,8 +106,33 @@ func TestClientSendMessageUsesEndpointAndTopic(t *testing.T) {
 	bot := &tgbotapi.BotAPI{Token: "test-token", Client: server.Client()}
 	client := NewClientWithAPIEndpoint(bot, server.URL+"/bot%s/%s")
 	topicID := 12
-	if err := client.SendMessage(context.Background(), -100, &topicID, "notice"); err != nil {
+	messageID, err := client.SendMessage(context.Background(), -100, &topicID, "notice")
+	if err != nil {
 		t.Fatal(err)
+	}
+	// The ID is required to remove the notice later.
+	if messageID != 1 {
+		t.Fatalf("SendMessage() message ID = %d, want 1", messageID)
+	}
+}
+
+func TestSentMessageIDToleratesMissingPayload(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		result string
+		want   int
+	}{
+		{"message id", `{"message_id":42}`, 42},
+		{"empty result", ``, 0},
+		{"not an object", `true`, 0},
+		{"missing field", `{"date":1}`, 0},
+		{"negative", `{"message_id":-3}`, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sentMessageID([]byte(tc.result)); got != tc.want {
+				t.Fatalf("sentMessageID(%q) = %d, want %d", tc.result, got, tc.want)
+			}
+		})
 	}
 }
 

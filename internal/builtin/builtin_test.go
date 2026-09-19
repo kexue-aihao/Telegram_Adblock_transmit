@@ -43,6 +43,13 @@ func detectorFixtures() map[string]domain.ModerationMessage {
 		HitIdentityTrade:          msg("实名号批量出售，联系 @example_agent"),
 		HitPersonalDataTrade:      msg("社工库个人信息打包出售，联系 @example_agent"),
 		HitSexualTrade:            msg("成人视频会员出售，联系 @example_agent"),
+		HitLaunderingSlang:        msg("招马车，汇率11，善后保司法，卸货无忧，联系 @example_agent"),
+		HitIdentityRecruit:        msg("拍照兼职，手持身份证拍照采集，日结报酬，联系 @example_agent"),
+		HitSexualSlang:            msg("空降色 上门服务，价目详谈，联系 @example_agent"),
+		HitGroupResourceTrade:     msg("大量出售老群资源，价格优惠，联系 @example_agent"),
+		HitBulkPosting:            msg("专业广告代发，群发广告套餐，支持 VCC 虚拟卡支付，联系 @example_agent"),
+		HitIdleProject:            msg("短剧挂机项目，日入6千，手把手带，加群看项目 @example_agent"),
+		HitGreyMarket:             msg("水货手机现货，港版苹果只要6k，特价拿货，联系 @example_agent"),
 	}
 }
 

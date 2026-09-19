@@ -56,3 +56,46 @@
 {"id":"d056","family":"benign_word_senses","kind":"negative","text":"朋友的洗衣店承接衣服代洗。","want":[]}
 {"id":"d057","family":"finance_euphemism_offer","kind":"positive","text":"代洗资金业务，按单接单，有意详谈","want":["ad_money_laundering"]}
 {"id":"d058","family":"finance_euphemism_offer","kind":"positive","text":"水房资金通道接单，收款流水秒结","want":["ad_money_mule"]}
+{"id":"d059","family":"fleet_slang_recruit","kind":"positive","text":"招马车，汇率11，善后保司法，卸货无忧，联系 @sample_agent","want":["ad_laundering_slang"]}
+{"id":"d060","family":"fleet_slang_recruit","kind":"positive","text":"微信红包车长期要人，日结佣金，上车私聊","want":["ad_laundering_slang"]}
+{"id":"d061","family":"fleet_slang_recruit","kind":"positive","text":"收人头号，一人三张卡，包吃住，有意详谈 @sample_agent","want":["ad_laundering_slang"]}
+{"id":"d062","family":"identity_material_gig","kind":"positive","text":"拍照兼职，手持身份证拍照采集，日结三百，联系 @sample_agent","want":["ad_identity_recruit"]}
+{"id":"d063","family":"identity_material_gig","kind":"positive","text":"招募人脸采集人员，刷脸认证兼职，一单四十 @sample_agent","want":["ad_identity_recruit"]}
+{"id":"d064","family":"outcall_slang_offer","kind":"positive","text":"空降色 上门服务，包夜价目私聊，联系 @sample_agent","want":["ad_sexual_slang"]}
+{"id":"d065","family":"outcall_slang_offer","kind":"positive","text":"同城上门 快餐服务，色 300一次，联系 @sample_agent","want":["ad_sexual_slang"]}
+{"id":"d066","family":"group_resource_trade","kind":"positive","text":"大量出售老群资源，精准群号源批发，报价优惠 @sample_agent","want":["ad_group_resource_trade"]}
+{"id":"d067","family":"group_resource_trade","kind":"positive","text":"出老号白号，实名号成品号长期有货，价格私聊 @sample_agent","want":["ad_group_resource_trade"]}
+{"id":"d068","family":"benign_convoy_life","kind":"negative","text":"周末自驾车队出发，费用 AA，要去的联系我报名。","want":[]}
+{"id":"d069","family":"benign_convoy_life","kind":"negative","text":"草原旅游马车体验，包吃住，联系 @sample_guide。","want":[]}
+{"id":"d070","family":"benign_convoy_life","kind":"negative","text":"物流车队长期承运，运费日结，联系 @sample_logistics。","want":[]}
+{"id":"d071","family":"benign_service_visit","kind":"negative","text":"热水器上门安装，预约请联系师傅。","want":[]}
+{"id":"d072","family":"benign_service_visit","kind":"negative","text":"上门保洁 200一次，联系 @sample_clean。","want":[]}
+{"id":"d073","family":"benign_photo_work","kind":"negative","text":"招聘摄影助理，负责整理照片，日结 200，联系 @sample_studio。","want":[]}
+{"id":"d074","family":"benign_group_chat","kind":"negative","text":"长期活跃群招募管理员，联系 @sample_admin。","want":[]}
+{"id":"d075","family":"benign_group_chat","kind":"negative","text":"我们老群最近没人说话了，大家来聊聊。","want":[]}
+{"id":"d076","family":"reported_fleet_case","kind":"negative","text":"警方通报，该团伙以马车、红包车招揽卡农，汇率11，保司法，请勿参与。","want":[]}
+{"id":"d077","family":"reported_fleet_case","kind":"negative","text":"反诈提醒：有人用马车、汇率11招揽卡农，请联系警方举报。","want":[]}
+{"id":"d078","family":"slang_symbol_insertion","kind":"adversarial","text":"招马·车，汇 率11，善后保司法 @sample_agent","want":["ad_laundering_slang"]}
+{"id":"d079","family":"slang_traditional_offer","kind":"adversarial","text":"招馬車，匯率11，善後保司法，聯繫 @sample_agent","want":["ad_laundering_slang"]}
+{"id":"d080","family":"slang_zero_width","kind":"adversarial","text":"空降​色 上门服务，包夜价目 @sample_agent","want":["ad_sexual_slang"]}
+{"id":"d081","family":"slang_warning_label","kind":"adversarial","text":"禁止白嫖 空降色 上门服务 包夜价目 @sample_agent","want":["ad_sexual_slang"]}
+{"id":"d082","family":"slang_warning_label","kind":"adversarial","text":"反诈提醒：招马车，汇率11，善后保司法 @sample_agent","want":["ad_laundering_slang"]}
+{"id":"d083","family":"bulk_posting_service","kind":"positive","text":"专业广告代发，广告投放支付，VCC虚拟卡稳定便捷","want":["ad_bulk_posting"]}
+{"id":"d084","family":"bulk_posting_service","kind":"positive","text":"承接群发广告，私信群发套餐，支持虚拟卡结算，代理加群 @sample_agent","want":["ad_bulk_posting"]}
+{"id":"d085","family":"idle_project_recruit","kind":"positive","text":"跑分|日1W|短剧挂机项目|全网招代理。","want":["ad_idle_project"]}
+{"id":"d086","family":"idle_project_recruit","kind":"positive","text":"无风险的来，有码来帮我洗钱日入6千，","want":["ad_money_laundering","ad_idle_project"]}
+{"id":"d087","family":"idle_project_recruit","kind":"positive","text":"名额有限，手把手带，加群看项目 一天赚8千！","want":["ad_idle_project"]}
+{"id":"d088","family":"grey_market_device_sale","kind":"positive","text":"苹果18只要６k，买手机‧可以找我，寻·手机店合·作，特价。水。果.机，１8ｐｒo只要6k","want":["ad_grey_market"]}
+{"id":"d089","family":"grey_market_device_sale","kind":"positive","text":"水货苹果手机批发，华强北统货，长期供货 @sample_agent","want":["ad_grey_market"]}
+{"id":"d090","family":"identity_urgent_photo","kind":"positive","text":"急招拍照📷　日结百左右","want":["ad_identity_recruit"]}
+{"id":"d091","family":"virtual_card_supply","kind":"positive","text":"VCC虚拟卡出售，虚拟信用卡开卡，联系 @sample_agent","want":["ad_identity_trade"]}
+{"id":"d092","family":"benign_work_notice","kind":"negative","text":"工地项目招人，日结300，联系 @sample_site。","want":[]}
+{"id":"d093","family":"benign_work_notice","kind":"negative","text":"招聘日结兼职，一天赚200，联系 @sample_hr。","want":[]}
+{"id":"d094","family":"benign_market_tips","kind":"negative","text":"短视频广告投放技巧分享，价格实惠 https://learn.example.invalid","want":[]}
+{"id":"d095","family":"benign_second_hand","kind":"negative","text":"iPhone 15 二手转让，只要 2500，联系 @sample_seller。","want":[]}
+{"id":"d096","family":"benign_version_talk","kind":"negative","text":"港版 iPhone 和国行有什么区别？想了解一下。","want":[]}
+{"id":"d097","family":"benign_version_talk","kind":"negative","text":"我在华强北买了台美版手机，比行货便宜。","want":[]}
+{"id":"d098","family":"benign_platform_notice","kind":"negative","text":"广告位申请流程已更新，请到后台查看。","want":[]}
+{"id":"d099","family":"benign_drama_chat","kind":"negative","text":"短剧更新到第 20 集了，挂机下载中。","want":[]}
+{"id":"d100","family":"service_symbol_insertion","kind":"adversarial","text":"广告代发 群发广告 虚拟卡 支付结算 联系 @sample_agent","want":["ad_bulk_posting"]}
+{"id":"d101","family":"grey_market_obfuscation","kind":"adversarial","text":"水 果 机 只要6k，苹果手机特价，找我 @sample_agent","want":["ad_grey_market"]}

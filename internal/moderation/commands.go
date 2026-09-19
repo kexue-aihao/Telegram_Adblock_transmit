@@ -18,11 +18,13 @@ var BotMenu = []CommandInfo{
 	{Name: "start", Description: "查看机器人简介与命令说明"},
 	{Name: "help", Description: "查看命令说明"},
 	{Name: "rule_add", Description: "新增一条启用的广告规则（群管理员）"},
+	{Name: "rule_regex", Description: "回复广告消息，自动转换为规则（群管理员）"},
 	{Name: "rule_list", Description: "查看本群广告规则（群管理员）"},
 	{Name: "rule_remove", Description: "删除本群规则（群管理员）"},
 	{Name: "rule_enable", Description: "启用本群规则（群管理员）"},
 	{Name: "rule_disable", Description: "停用本群规则（群管理员）"},
 	{Name: "rule_test", Description: "测试文本命中规则（群管理员）"},
+	{Name: "settings", Description: "查看或修改运行设置（机器人所有者）"},
 	{Name: "adlog", Description: "查看最近广告命中记录（群管理员）"},
 }
 
