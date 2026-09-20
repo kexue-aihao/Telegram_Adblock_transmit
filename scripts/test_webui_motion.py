@@ -36,7 +36,7 @@ def run(base_url, output, engines, axe_path=None):
                 # Playwright's wait_for_function evaluates a string inside the page and
                 # conflicts with the production CSP. Poll without relaxing that policy.
                 deadline = time.monotonic() + 5
-                while not page.evaluate("document.getAnimations().every(a => a.playState === 'finished') && [...document.querySelectorAll('[style]')].every(n => !n.style.willChange)"):
+                while not page.evaluate("document.getAnimations().filter(a => !a.effect.target.closest?.('.ambient')).every(a => a.playState === 'finished') && [...document.querySelectorAll('[style]')].every(n => !n.style.willChange)"):
                     assert time.monotonic() < deadline, "Animation did not settle"
                     page.wait_for_timeout(25)
                 expect(page.locator(".page-exit")).to_have_count(0)

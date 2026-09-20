@@ -1,11 +1,24 @@
-/* Base layer: resets, page canvas, typography and the accessibility fallbacks
-   that the motion regression suite asserts. */
+/* Base layer: font, page canvas, typography, the ambient layer and the
+   accessibility fallbacks that the motion regression suite asserts. */
+
+@font-face {
+  font-family: "Inter var";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  /* Vendored latin subset (OFL, see inter-LICENSE.txt). CJK falls back to the
+     system stack: a Chinese webfont would cost megabytes and no CDN is allowed. */
+  src: url("/assets/inter-var-latin.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
 html {
-  scroll-padding-top: 104px;
+  scroll-padding-top: 96px;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -15,21 +28,12 @@ body {
   color: var(--text);
   font-family: var(--font-sans);
   font-size: var(--text-base);
-  line-height: 1.6;
+  line-height: var(--leading-base);
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  background-color: var(--bg);
-  /* Two soft light sources plus a faint grid: static, never animated. */
-  background-image:
-    radial-gradient(1100px 620px at 8% -8%, var(--ambient-1), transparent 60%),
-    radial-gradient(900px 560px at 96% 4%, var(--ambient-2), transparent 62%),
-    radial-gradient(700px 500px at 50% 110%, var(--ambient-3), transparent 65%),
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: auto, auto, auto, 32px 32px, 32px 32px;
-  background-attachment: fixed;
-  -webkit-tap-highlight-color: color-mix(in srgb, var(--accent) 14%, transparent);
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg);
+  -webkit-tap-highlight-color: var(--accent-soft);
 }
 
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -37,34 +41,34 @@ button, a, input, select, summary { touch-action: manipulation; }
 button { cursor: pointer; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; text-underline-offset: 3px; }
+a:hover { color: var(--accent-hover); text-decoration: none; }
 
+/* A keyboard-only focus ring in the brand colour. */
 :focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: var(--radius-xs);
 }
+::selection { background: var(--accent-soft); color: var(--text); }
 
-::selection { background: var(--accent-soft-strong); color: var(--text); }
-
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
-}
+/* Thin scrollbars: the default ones are loud inside a dark panel. */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--border-strong) 70%, transparent);
+  background: var(--border-strong);
   border: 3px solid transparent;
   border-radius: var(--radius-pill);
   background-clip: content-box;
 }
-*::-webkit-scrollbar-thumb:hover { background: var(--border-strong); background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
 
 h1, h2, h3, p { margin: 0; }
-h1 { font-size: var(--text-2xl); line-height: 1.25; font-weight: 700; letter-spacing: var(--tracking-tight); text-wrap: balance; }
-h2 { font-size: var(--text-lg); line-height: 1.4; font-weight: 650; letter-spacing: var(--tracking-tight); text-wrap: balance; }
-h3 { font-size: var(--text-base); font-weight: 650; letter-spacing: -0.005em; }
+/* Tightening headings is the cheapest design win there is. */
+h1, h2, h3 { letter-spacing: var(--tracking-tight); font-weight: 600; }
+h1 { font-size: var(--text-2xl); line-height: var(--leading-2xl); }
+h2 { font-size: var(--text-lg); line-height: var(--leading-lg); }
+h3 { font-size: var(--text-base); }
 
 .icon, .brand-mark {
   width: 18px; height: 18px; flex: 0 0 18px;
@@ -75,7 +79,7 @@ h3 { font-size: var(--text-base); font-weight: 650; letter-spacing: -0.005em; }
 .mono, code, pre { font-family: var(--font-mono); }
 .small { font-size: var(--text-xs); }
 .muted, .hint { color: var(--muted); }
-.hint { font-size: var(--text-xs); line-height: 1.6; margin: 6px 0 0; overflow-wrap: anywhere; }
+.hint { font-size: var(--text-xs); line-height: var(--leading-xs); margin: 6px 0 0; overflow-wrap: anywhere; }
 .err-text { color: var(--err); font-weight: 600; }
 
 .sr-only {
@@ -85,25 +89,61 @@ h3 { font-size: var(--text-base); font-weight: 650; letter-spacing: -0.005em; }
 
 .skip-link {
   position: fixed; top: -120px; left: 16px; z-index: var(--layer-skip);
-  padding: 10px 18px; border-radius: var(--radius-control);
-  background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-md);
-  transition: top var(--motion-control) var(--ease);
+  padding: 8px 16px; border-radius: var(--radius-control);
+  background: var(--surface); border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  transition: top var(--duration-state) var(--ease-expo);
 }
 .skip-link:focus { top: 12px; }
 
-/* Metric numerals line up in columns and read as data, not prose. */
-.num, .stat-value, .chart-label, .pagination-info, .result-count,
-.id-cell, .time-cell, .trend-table td { font-variant-numeric: tabular-nums; }
+/* ── Ambient layer ─────────────────────────────────────────────────────────
+   Four very large, very soft orbs drift behind everything on cycles of 60-90
+   seconds. They are barely visible, but they are what makes the frosted chrome
+   read as glass instead of as a grey panel: backdrop-filter needs something
+   with a colour cast behind it, and something that moves. */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-base);
+  overflow: hidden;
+  pointer-events: none;
+}
+.ambient-orb {
+  position: absolute;
+  border-radius: 50%;
+  opacity: var(--ambient-opacity);
+  will-change: transform;
+  /* A soft radial gradient instead of filter: blur(). Blurring a half-viewport
+     element re-rasterizes it on every animation frame; a gradient is rasterized
+     once and then only transformed, which is what keeps the drift free. */
+  background-image: radial-gradient(closest-side, var(--orb-color) 0%, transparent 72%);
+}
+.orb-a { bottom: -58%; left: -12%; width: 54vw; height: 54vw; --orb-color: var(--orb-a); animation: drift-a 72s var(--ease-in-out) infinite; }
+.orb-b { bottom: -52%; right: -18%; width: 48vw; height: 48vw; --orb-color: var(--orb-b); animation: drift-b 88s var(--ease-in-out) infinite; }
+.orb-c { bottom: -68%; left: 26%; width: 60vw; height: 60vw; --orb-color: var(--orb-c); }
+.orb-d { bottom: -40%; left: 52%; width: 32vw; height: 32vw; --orb-color: var(--orb-d); }
 
+/* The application shell paints above the ambient layer. */
+.shell { position: relative; z-index: 10; height: 100%; }
+
+/* ── Motion vocabulary ───────────────────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(1turn); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 @keyframes detail-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes drift-a { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(5%, -4%, 0); } }
+@keyframes drift-b { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(-4%, 5%, 0); } }
+@keyframes drift-c { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(3%, -6%, 0); } }
+@keyframes sweep { from { background-color: var(--accent-soft); } to { background-color: transparent; } }
+@keyframes shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
 
-/* Panels rendered without backdrop-filter support fall back to opaque
-   surfaces, and the same happens when the user asks for less transparency,
-   more contrast or forced colors. */
+.sweep-in { animation: sweep var(--duration-page) var(--ease-expo); }
+.tnum, .stat-value, .pagination-info, .result-count, .id-cell, .time-cell,
+.trend-table td, .chart-label { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+/* ── Fallbacks ───────────────────────────────────────────────────────────── */
+
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root, [data-theme="dark"] { --glass: var(--surface); --glass-strong: var(--surface); --blur: 0px; }
+  :root, [data-theme="dark"] { --glass: var(--surface); --glass-strong: var(--surface); --blur: 0px; --blur-strong: 0px; }
 }
 
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
@@ -119,19 +159,19 @@ h3 { font-size: var(--text-base); font-weight: 650; letter-spacing: -0.005em; }
     --shadow-lg: none;
     --shadow-xl: none;
   }
-  .topbar, .sidebar, .modal, .login-form, .toast, .panel, .stat { border-color: var(--border-strong); }
-  .topbar, .sidebar, .modal, .login-form { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .ambient { display: none; }
+  .topbar, .sidebar, .modal, .login-form, .toast { -webkit-backdrop-filter: none; backdrop-filter: none; border-color: var(--border-strong); }
 }
 
 @media (forced-colors: active) {
   .track { border: 1px solid ButtonText; }
   .switch input:checked + .track { background: Highlight; border-color: Highlight; }
   .nav-item[aria-current="page"] { outline: 2px solid Highlight; outline-offset: -2px; }
-  .btn.primary { border-color: ButtonText; }
-  .badge { border: 1px solid ButtonText; }
   .segmented-thumb { display: none; }
 }
 
+/* Reduced motion keeps state feedback as instant transitions but stops
+   everything decorative, including the ambient drift. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;

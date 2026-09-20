@@ -1,84 +1,103 @@
 /* Design tokens for the moderation console.
    Token names are a contract: the not-yet-migrated page renderers reference
-   some of them directly, and the theme is switched by html[data-theme]. */
+   some of them directly, and the theme is switched by html[data-theme].
+
+   The language follows the sibling panel (packages/web-vue in
+   Telegram_session_Adblock): depth comes from luminance steps plus a hairline
+   with a one-pixel inner highlight, interaction states are neutral alpha
+   washes, and the brand colour appears only where it carries meaning. */
 
 :root {
   color-scheme: light;
 
-  /* Surfaces: white blushed with violet, on a pale lilac canvas. */
-  --bg: #f6f4fc;
-  --bg-deep: #ece7f8;
+  /* Surfaces: the canvas sits well below white so cards and glass can stand up. */
+  --bg: #eceff5;
+  --bg-deep: #e4e8ef;
   --surface: #ffffff;
-  --surface-2: #f4f1fb;
-  --surface-3: #e9e3f7;
-  --surface-inset: #f1edfa;
+  --surface-2: #f2f4f8;
+  --surface-3: #e4e8ef;
+  --surface-inset: #f2f4f8;
+
+  /* Neutral interaction washes: they work on any surface. */
+  --hover: rgb(12 16 24 / 0.035);
+  --active: rgb(12 16 24 / 0.06);
+  --highlight: rgb(255 255 255 / 0.9);
+
+  /* Lines: three weights, brighter towards the top. */
+  --border-soft: rgb(12 16 24 / 0.08);
+  --border: rgb(12 16 24 / 0.13);
+  --border-strong: rgb(12 16 24 / 0.18);
 
   /* Ink */
-  --text: #171223;
-  --text-soft: #3b3350;
-  --muted: #645b7a;
-  --muted-strong: #4a4260;
+  --text: #12151c;
+  --text-soft: #596172;
+  --muted: #596172;
+  --muted-strong: #454c5c;
+  --faint: #858da0;
 
-  /* Lines */
-  --border: #e3ddf3;
-  --border-soft: rgba(23, 18, 35, 0.07);
-  --border-strong: #b7acd6;
-
-  /* Brand: violet, with a brighter partner for gradients. */
-  --accent: #6d28d9;
-  --accent-hover: #5b21b6;
-  --accent-strong: #4c1d95;
-  --accent-bright: #8b5cf6;
-  --accent-soft: #f0eafd;
-  --accent-soft-strong: #ded0fb;
+  /* Brand: a single blue, plus a violet partner for gradients. */
+  --accent: oklch(0.51 0.18 262);
+  --accent-bright: oklch(0.70 0.16 250);
+  --accent-hover: oklch(0.44 0.19 264);
+  --accent-deep: oklch(0.45 0.19 264);
+  --accent-soft: oklch(0.70 0.16 250 / 0.12);
+  --accent-soft-strong: oklch(0.70 0.16 250 / 0.2);
   --accent-ink: #ffffff;
+  --violet: oklch(0.62 0.20 295);
+  --focus: oklch(0.51 0.18 262);
 
   /* Semantic */
-  --ok: #0f7a54;
-  --ok-soft: #e6f5ee;
-  --err: #b21f4a;
-  --err-soft: #fdeaf0;
-  --warn: #8a5209;
-  --warn-soft: #fdf3e0;
-  --info: #6d28d9;
-  --focus: #7c3aed;
+  --ok: oklch(0.47 0.13 155);
+  --ok-soft: oklch(0.70 0.16 155 / 0.16);
+  --warn: oklch(0.5 0.14 80);
+  --warn-soft: oklch(0.80 0.14 80 / 0.18);
+  --err: oklch(0.47 0.19 25);
+  --err-soft: oklch(0.68 0.20 25 / 0.14);
+  --info: oklch(0.55 0.18 262);
 
   /* Data visualisation */
-  --chart-success: #0e8a6c;
-  --chart-failed: #d1345b;
-  --chart-grid: rgba(23, 18, 35, 0.08);
+  --chart-success: oklch(0.62 0.13 168);
+  --chart-failed: oklch(0.62 0.19 20);
+  --chart-grid: rgb(12 16 24 / 0.08);
 
-  /* Glass: chrome, cards and dialogs over the lilac aurora. */
-  --glass: rgba(255, 255, 255, 0.62);
-  --glass-strong: rgba(255, 255, 255, 0.78);
-  --glass-edge: rgba(255, 255, 255, 0.92);
-  --glass-tint: rgba(255, 255, 255, 0.5);
-  --blur: 16px;
-  --blur-strong: 24px;
+  /* Ambient: four slow orbs are what makes the glass read as glass. */
+  --orb-a: oklch(0.86 0.065 258);
+  --orb-b: oklch(0.88 0.058 280);
+  --orb-c: oklch(0.87 0.07 296);
+  --orb-d: oklch(0.9 0.048 200);
+  --ambient-opacity: 0.5;
+  --orb-blur: 100px;
 
-  /* Ambient: static violet aurora behind the whole panel. */
-  --ambient-1: rgba(139, 92, 246, 0.18);
-  --ambient-2: rgba(217, 70, 239, 0.12);
-  --ambient-3: rgba(109, 40, 217, 0.08);
-  --grid-line: rgba(23, 18, 35, 0.035);
+  /* Glass: in light mode a surface must be whiter than the canvas, not clearer. */
+  --glass-base: #ffffff;
+  --glass-alpha: 68%;
+  --glass-deep-base: #ffffff;
+  --glass-deep-alpha: 88%;
+  --glass-shadow: rgb(15 18 26 / 0.14);
+  --glass: color-mix(in oklab, var(--glass-base) var(--glass-alpha), transparent);
+  --glass-strong: color-mix(in oklab, var(--glass-deep-base) var(--glass-deep-alpha), transparent);
+  --glass-edge: var(--highlight);
+  --glass-tint: rgb(255 255 255 / 0.5);
+  --blur: 24px;
+  --blur-strong: 32px;
 
-  /* Elevation: purple-tinted shadows that read as depth, not blur. */
-  --shadow-xs: 0 1px 2px rgba(35, 20, 66, 0.06);
-  --shadow-sm: 0 1px 2px rgba(35, 20, 66, 0.06), 0 2px 8px rgba(35, 20, 66, 0.06);
-  --shadow-md: 0 2px 4px rgba(35, 20, 66, 0.06), 0 10px 24px rgba(35, 20, 66, 0.09);
-  --shadow-lg: 0 4px 8px rgba(35, 20, 66, 0.07), 0 20px 48px rgba(35, 20, 66, 0.12);
-  --shadow-xl: 0 8px 16px rgba(35, 20, 66, 0.09), 0 40px 88px rgba(35, 20, 66, 0.18);
+  /* Elevation: content cards carry no drop shadow, only the inner highlight. */
+  --shadow-xs: 0 1px 2px rgb(15 18 26 / 0.06);
+  --shadow-sm: 0 1px 3px rgb(15 18 26 / 0.08);
+  --shadow-md: 0 8px 24px -8px var(--glass-shadow);
+  --shadow-lg: 0 16px 48px -12px var(--glass-shadow);
+  --shadow-xl: 0 24px 64px -16px var(--glass-shadow);
   --shadow: var(--shadow-xl);
   --surface-shadow: var(--shadow-sm);
-  --glass-shadow: var(--shadow-md), inset 0 1px 0 var(--glass-edge);
-  --glow-accent: 0 0 0 1px rgba(109, 40, 217, 0.2), 0 8px 24px rgba(109, 40, 217, 0.2);
-  --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --glass-shadow-composed: inset 0 1px 0 var(--highlight), var(--shadow-lg);
+  --glow-accent: 0 0 0 3px var(--accent-soft);
+  --inner-highlight: inset 0 1px 0 var(--highlight);
 
   /* Radii */
   --radius-xs: 6px;
-  --radius-control: 11px;
-  --radius-panel: 16px;
-  --radius-chrome: 20px;
+  --radius-control: 8px;
+  --radius-panel: 12px;
+  --radius-chrome: 16px;
   --radius-modal: 24px;
   --radius-pill: 999px;
 
@@ -92,30 +111,43 @@
   --space-8: 32px;
   --space-10: 40px;
 
-  /* Type scale */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
-  --font-mono: "Cascadia Code", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  /* Type scale 11/12/13/14/16/20/28/40 */
+  --font-sans: "Inter var", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
   --text-2xs: 11px;
   --text-xs: 12px;
   --text-sm: 13px;
   --text-base: 14px;
-  --text-md: 15px;
-  --text-lg: 18px;
-  --text-xl: 22px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
   --text-2xl: 28px;
-  --text-metric: 38px;
-  --tracking-tight: -0.015em;
+  --text-metric: 30px;
+  --leading-2xs: 16px;
+  --leading-xs: 18px;
+  --leading-sm: 20px;
+  --leading-base: 22px;
+  --leading-lg: 24px;
+  --leading-xl: 28px;
+  --leading-2xl: 34px;
+  --tracking-tight: -0.022em;
   --tracking-wide: 0.08em;
 
-  /* Motion */
+  /* Motion: one vocabulary, no scattered magic numbers. */
+  --duration-micro: 120ms;
+  --duration-state: 200ms;
+  --duration-layout: 320ms;
+  --duration-page: 480ms;
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-state: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --motion-instant: 90ms;
-  --motion-fast: 140ms;
-  --motion-control: 200ms;
-  --motion-page: 260ms;
-  --motion-slow: 420ms;
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-instant: var(--duration-micro);
+  --motion-fast: var(--duration-micro);
+  --motion-control: var(--duration-state);
+  --motion-page: var(--duration-layout);
+  --motion-slow: var(--duration-page);
   --stagger: 28ms;
 
   /* Layers */
@@ -127,72 +159,84 @@
 
   /* Aliases kept for the structural stylesheet, which predates the token split. */
   --surface2: var(--surface-2);
-  --ambient: var(--ambient-1);
+  --ambient: var(--orb-a);
 
   /* Component shorthands */
-  --control-height: 40px;
-  --control-height-sm: 32px;
-  --topbar-height: 64px;
+  --control-height: 36px;
+  --control-height-sm: 30px;
+  --topbar-height: 56px;
   --sidebar-width: 232px;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #07060c;
-  --bg-deep: #030206;
-  --surface: #100d1a;
-  --surface-2: #171327;
-  --surface-3: #1f1a33;
-  --surface-inset: #0c0a15;
+  /* Near-black with a blue-violet cast: pure black loses the layering. */
+  --bg: #07080b;
+  --bg-deep: #050609;
+  --surface: #0c0e13;
+  --surface-2: #11141b;
+  --surface-3: #171b24;
+  --surface-inset: #11141b;
 
-  --text: #f1ecfb;
-  --text-soft: #c8bede;
-  --muted: #9d92b9;
-  --muted-strong: #b6abd1;
+  --hover: rgb(255 255 255 / 0.04);
+  --active: rgb(255 255 255 / 0.07);
+  --highlight: rgb(255 255 255 / 0.07);
 
-  --border: #241d38;
-  --border-soft: rgba(241, 236, 251, 0.08);
-  --border-strong: #3d3358;
+  --border-soft: rgb(255 255 255 / 0.05);
+  --border: rgb(255 255 255 / 0.09);
+  --border-strong: rgb(255 255 255 / 0.16);
 
-  --accent: #a78bfa;
-  --accent-hover: #c4b5fd;
-  --accent-strong: #ddd6fe;
-  --accent-bright: #8b5cf6;
-  --accent-soft: rgba(167, 139, 250, 0.15);
-  --accent-soft-strong: rgba(167, 139, 250, 0.26);
-  --accent-ink: #150a24;
+  --text: #e9ebf2;
+  --text-soft: #9aa1b2;
+  --muted: #9aa1b2;
+  --muted-strong: #c3c8d6;
+  --faint: #626a7c;
 
-  --ok: #4ddba4;
-  --ok-soft: rgba(77, 219, 164, 0.14);
-  --err: #ff9db4;
-  --err-soft: rgba(255, 122, 156, 0.16);
-  --warn: #f2c879;
-  --warn-soft: rgba(242, 200, 121, 0.15);
-  --info: #b9a4ff;
-  --focus: #b9a4ff;
+  --accent: oklch(0.78 0.16 250);
+  --accent-bright: oklch(0.70 0.16 250);
+  --accent-hover: oklch(0.86 0.13 250);
+  --accent-deep: oklch(0.55 0.18 262);
+  --accent-soft: oklch(0.70 0.16 250 / 0.16);
+  --accent-soft-strong: oklch(0.70 0.16 250 / 0.26);
+  --accent-ink: #06121f;
+  --violet: oklch(0.66 0.20 295);
+  --focus: oklch(0.78 0.16 250);
 
-  --chart-success: #37c9a1;
-  --chart-failed: #ff8b9f;
-  --chart-grid: rgba(241, 236, 251, 0.09);
+  --ok: oklch(0.74 0.16 155);
+  --ok-soft: oklch(0.74 0.16 155 / 0.13);
+  --warn: oklch(0.80 0.14 80);
+  --warn-soft: oklch(0.80 0.14 80 / 0.13);
+  --err: oklch(0.68 0.20 25);
+  --err-soft: oklch(0.68 0.20 25 / 0.13);
+  --info: oklch(0.78 0.16 250);
 
-  --glass: rgba(11, 8, 19, 0.6);
-  --glass-strong: rgba(11, 8, 19, 0.8);
-  --glass-edge: rgba(241, 236, 251, 0.08);
-  --glass-tint: rgba(255, 255, 255, 0.03);
-  --blur: 18px;
-  --blur-strong: 26px;
+  --chart-success: oklch(0.74 0.16 155);
+  --chart-failed: oklch(0.68 0.20 25);
+  --chart-grid: rgb(255 255 255 / 0.09);
 
-  --ambient-1: rgba(139, 92, 246, 0.26);
-  --ambient-2: rgba(217, 70, 239, 0.16);
-  --ambient-3: rgba(167, 139, 250, 0.1);
-  --grid-line: rgba(241, 236, 251, 0.03);
+  --orb-a: oklch(0.70 0.21 258);
+  --orb-b: oklch(0.66 0.21 280);
+  --orb-c: oklch(0.64 0.24 296);
+  --orb-d: oklch(0.76 0.14 200);
+  --ambient-opacity: 0.3;
+  --orb-blur: 110px;
 
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45), 0 2px 10px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.5), 0 12px 28px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 6px 14px rgba(0, 0, 0, 0.55), 0 24px 56px rgba(0, 0, 0, 0.6);
-  --shadow-xl: 0 10px 24px rgba(0, 0, 0, 0.6), 0 48px 96px rgba(0, 0, 0, 0.65);
-  --glow-accent: 0 0 0 1px rgba(167, 139, 250, 0.28), 0 10px 28px rgba(167, 139, 250, 0.22);
-  --inner-highlight: inset 0 1px 0 rgba(241, 236, 251, 0.07);
+  --glass-base: var(--surface);
+  --glass-alpha: 52%;
+  --glass-deep-base: var(--surface-2);
+  --glass-deep-alpha: 66%;
+  --glass-shadow: rgb(0 0 0 / 0.7);
+  --glass-edge: var(--highlight);
+  --glass-tint: rgb(255 255 255 / 0.03);
+  --blur: 24px;
+  --blur-strong: 32px;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 8px 24px -8px var(--glass-shadow);
+  --shadow-lg: 0 16px 48px -12px var(--glass-shadow);
+  --shadow-xl: 0 24px 64px -16px var(--glass-shadow);
+  --glow-accent: 0 0 0 3px var(--accent-soft);
+  --inner-highlight: inset 0 1px 0 var(--highlight);
 }

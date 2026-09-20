@@ -55,6 +55,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <div class="ambient" aria-hidden="true">
+    <span class="ambient-orb orb-a" />
+    <span class="ambient-orb orb-b" />
+    <span class="ambient-orb orb-c" />
+    <span class="ambient-orb orb-d" />
+  </div>
+  <div class="shell">
   <a class="skip-link" href="#view" @click="onSkipLink">跳到主要内容</a>
   <TopBar />
   <div class="layout">
@@ -75,6 +82,7 @@ onBeforeUnmount(() => {
         <component :is="Component" :key="route.path + ':' + pageReloadToken" />
       </RouterView>
     </main>
+  </div>
   </div>
   <div id="modal-root"></div>
   <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-relevant="additions"></div>
