@@ -127,6 +127,33 @@ def run(base_url, output, engines, axe_path=None):
                     for route, ready in routes:
                         visit(route, ready)
                         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), (engine, width, route)
+                        # The panel is a fixed-viewport shell: the document never
+                        # scrolls and #view is the only scroller. If .shell stops
+                        # stretching to the viewport (it must be a full-height flex
+                        # column for that), every wrapper grows to its content, #view
+                        # gets no scrollable overflow and body{overflow:hidden} clips
+                        # the rest — a long page with a dead wheel. Assert the shell
+                        # fits the window and that a taller page is reachable.
+                        scroll = page.evaluate("""() => {
+                            const view = document.querySelector('#view');
+                            const shell = document.querySelector('.shell').getBoundingClientRect();
+                            const doc = document.scrollingElement;
+                            const overflow = view.scrollHeight - view.clientHeight;
+                            let reached = true;
+                            if (overflow > 1) {
+                                view.scrollTop = overflow;
+                                reached = view.scrollTop >= overflow - 1;
+                                view.scrollTop = 0;
+                            }
+                            return {
+                                shellFits: shell.height <= innerHeight + 1 && shell.bottom <= innerHeight + 1,
+                                documentFixed: !(doc.scrollHeight > doc.clientHeight + 1),
+                                // #view is the scroller, never a descendant.
+                                viewIsScroller: getComputedStyle(view).overflowY === 'auto',
+                                reached: reached,
+                            };
+                        }""")
+                        assert all(scroll.values()), (engine, width, route, appearance, scroll)
                         # The selection marker is a thin bar, so what has to hold is
                         # that its centre stays on the active item's centre after both
                         # navigation and resize.

@@ -62,6 +62,17 @@ insets. Content is capped at 1600px. Below 900px the sidebar becomes a horizonta
 navigation bar; below 640px labels stack beneath icons and tables become labeled
 records. Dashboard trend/failure columns collapse below 1200px.
 
+The shell is a fixed-viewport column: the document never scrolls and `#view` is
+the only scroll container, so long pages are reached with the wheel inside the
+content column. `.shell` must therefore be a full-height flex column
+(`height: 100dvh; display: flex; flex-direction: column`) — that is what lets
+`.layout`'s `flex: 1` bind and gives `#view` a bounded height. If any wrapper in
+that chain is a plain block it grows to its content, `#view`'s `overflow-y: auto`
+never engages and everything below the fold is clipped by `body { overflow:
+hidden }`. The topbar and the rail stay put because they are siblings of `#view`,
+not sticky elements inside it. The motion suite asserts the shell fits the
+viewport and that a page taller than it is reachable.
+
 `backdrop-filter` is used only where content actually scrolls behind a surface:
 the topbar, the sidebar, dialogs and toasts. Content cards are opaque with a
 hairline and a one-pixel inner highlight and carry no drop shadow — blurring
