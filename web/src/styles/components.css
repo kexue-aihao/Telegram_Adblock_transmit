@@ -793,8 +793,24 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
 }
 
 /* ── Settings and login ───────────────────────────────────────────────────── */
-.settings-sections { gap: var(--space-3); max-width: 1040px; }
-.settings-section { padding: var(--space-4); }
+/* Settings tile across the whole content width: the sections sit side by side
+   and each one stacks its heading above its controls, so nothing is squeezed
+   into a narrow centred column. */
+.settings-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--space-3);
+  align-items: start;
+  max-width: none;
+}
+.settings-section { display: block; padding: var(--space-4); }
+.settings-section > div:first-child { margin-bottom: var(--space-4); }
+.settings-controls { gap: var(--space-4); }
+.settings-toggle { gap: var(--space-3); }
+.settings-toggle .switch { align-self: flex-start; }
+@media (max-width: 900px) {
+  .settings-sections { grid-template-columns: minmax(0, 1fr); }
+}
 .settings-toggle h3 { font-size: var(--text-sm); font-weight: 500; }
 .settings-toggle p { font-size: var(--text-xs); color: var(--color-ink-muted); }
 .login-wrap { min-height: 100%; }
