@@ -37,13 +37,13 @@ on top of them in the same file.
 
 | Role | Light | Dark |
 | --- | --- | --- |
-| Background | `#f2f5f5` | `#080d0f` |
-| Content surface | `#ffffff` | `#0f1719` |
-| Primary text | `#0d1a1c` | `#e9f2f1` |
-| Secondary text | `#5a6d71` (AA on every surface) | `#91a6a5` |
-| Accent | `#0d7268` → `#14b8a6` gradient | `#2fd4bd` → `#4fe3cd` gradient |
-| Glass fill | white / 68%, strong 84% | ink / 62%, strong 82% |
-| Ambient | teal + indigo radials, static | same, higher alpha |
+| Background | `#f6f4fc` (white + violet) | `#07060c` (black + violet) |
+| Content surface | `#ffffff` | `#100d1a` |
+| Primary text | `#171223` | `#f1ecfb` |
+| Secondary text | `#645b7a` (AA on every surface) | `#9d92b9` |
+| Accent | `#6d28d9` → `#8b5cf6` gradient | `#a78bfa` → `#8b5cf6` gradient |
+| Glass fill | white / 62%, strong 78% | ink-violet / 60%, strong 80% |
+| Ambient | violet + magenta radials, static | same, higher alpha |
 
 Semantic success, warning and error colors remain independent of the brand
 accent. Headings use 28/18px, body text 14px, secondary information at least 12px,

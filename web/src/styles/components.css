@@ -845,3 +845,19 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Frosted cards: the large surfaces are translucent, so the violet aurora shows
+   through and the panel reads as glass. Backdrop blur is reserved for surfaces
+   that content actually scrolls behind (chrome, dialogs, toasts, hover layers):
+   blurring every card costs frames and, over a smooth gradient, looks the same. */
+.stat,
+.filter-bar, .rules-filters, .date-filters, .audit-filters,
+.table-wrap, .builtin-master, .builtin-rule, .builtin-test,
+.settings-section, .empty-state {
+  background-color: color-mix(in srgb, var(--surface) 76%, transparent);
+}
+.stat { background-image: linear-gradient(180deg, var(--glass-tint), transparent 60%); }
+.builtin-master { background-image: linear-gradient(120deg, var(--accent-soft), transparent 60%); }
+.data thead th { background-color: color-mix(in srgb, var(--surface-2) 86%, transparent); }
+.data tbody tr:hover { background-color: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+.message-content, .summary-expand > pre { background-color: color-mix(in srgb, var(--surface-inset) 88%, transparent); }
