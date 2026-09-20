@@ -37,31 +37,50 @@ on top of them in the same file.
 
 | Role | Light | Dark |
 | --- | --- | --- |
-| Background | `#f6f4fc` (white + violet) | `#07060c` (black + violet) |
-| Content surface | `#ffffff` | `#100d1a` |
-| Primary text | `#171223` | `#f1ecfb` |
-| Secondary text | `#645b7a` (AA on every surface) | `#9d92b9` |
-| Accent | `#6d28d9` → `#8b5cf6` gradient | `#a78bfa` → `#8b5cf6` gradient |
-| Glass fill | white / 62%, strong 78% | ink-violet / 60%, strong 80% |
-| Ambient | violet + magenta radials, static | same, higher alpha |
+| Canvas | `#eceff5` | `#07080b` |
+| Surface / raised | `#ffffff` / `#f2f4f8` | `#0c0e13` / `#11141b` |
+| Ink / secondary | `#12151c` / `#596172` | `#e9ebf2` / `#9aa1b2` |
+| Lines (three weights) | ink 8% / 13% / 18% | white 5% / 9% / 16% |
+| Hover / active | ink 3.5% / 6% | white 4% / 7% |
+| Brand | `oklch(.51 .18 262)`, hover darker | `oklch(.78 .16 250)`, hover brighter |
+| Glass | white 68% / 88% | surface 52% / raised 66% |
+
+Interaction states are neutral alpha washes rather than brand tints, and the
+canvas sits well below white so cards and glass have somewhere to stand. The
+palette and its reasoning follow the sibling panel in `Telegram_session_Adblock`
+(`packages/web-vue/src/styles/theme.css`); keep the two in step.
 
 Semantic success, warning and error colors remain independent of the brand
 accent. Headings use 28/18px, body text 14px, secondary information at least 12px,
-and primary metrics 38px. Mobile fields use 16px to avoid automatic input zoom.
+and primary metrics 30px. Mobile fields use 16px to avoid automatic input zoom.
 Headings carry `-0.015em` tracking, everywhere else tracking is zero. Spacing
 follows 4/8/12/16/20/24/32/40px increments (`--space-*`), and numerals in
 metrics, tables and chart axes are tabular.
 
-Controls use 11px radii, panels 16px, navigation chrome 20px and dialogs 24px. The 216px desktop sidebar and 64px topbar have 12px outer
+Controls use 8px radii, panels 12px, navigation chrome 16px and dialogs 24px. The 216px desktop sidebar and 64px topbar have 12px outer
 insets. Content is capped at 1600px. Below 900px the sidebar becomes a horizontal
 navigation bar; below 640px labels stack beneath icons and tables become labeled
 records. Dashboard trend/failure columns collapse below 1200px.
 
-Glass is limited to navigation, login and dialogs, with static 16px blur (10px
-on mobile), a fine edge highlight and diffuse shadow. The ambient background is
-static. Reduced transparency, increased contrast, forced colors and unsupported
-backdrop filters receive opaque surfaces. Stored theme preference takes priority
-over the initial system appearance, with initialization before CSS to avoid a flash.
+`backdrop-filter` is used only where content actually scrolls behind a surface:
+the topbar, the sidebar, dialogs and toasts. Content cards are opaque with a
+hairline and a one-pixel inner highlight and carry no drop shadow — blurring
+dozens of cards costs frames and, over a smooth gradient, looks identical.
+
+The ambient layer is a fixed set of four large orbs (blue, blue-violet, violet,
+cyan) drifting on 72-96 second cycles. It is what makes the frosted chrome read
+as glass rather than as a grey bar: blur needs something with a colour cast
+behind it, and something that moves. Two properties are non-negotiable — the orbs
+are drawn with radial gradients rather than `filter: blur()` (a blurred
+half-viewport element re-rasterizes every frame) and their drift animates
+`translate3d` only, never `scale`. Judge them from a viewport-sized screenshot:
+a full-page capture lays the fixed layer out over the whole document and makes
+the orbs look far brighter than they are.
+
+Reduced transparency, increased contrast, forced colors and unsupported backdrop
+filters receive opaque surfaces and no ambient layer. Stored theme preference
+takes priority over the initial system appearance, with initialization before CSS
+to avoid a flash.
 
 ## Motion and request ownership
 
