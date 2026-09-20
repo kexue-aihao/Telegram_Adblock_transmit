@@ -102,7 +102,9 @@ func TestWebUIPreview(t *testing.T) {
 		defer mu.Unlock()
 		w.Header().Set("X-WebUI-Preview", "true")
 		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/assets/") {
-			http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))).ServeHTTP(w, r)
+			// Same MIME table as production: the preview must not mask a
+			// Content-Type problem that only shows up under nosniff.
+			http.StripPrefix("/assets/", assetFileServer(os.DirFS("assets"))).ServeHTTP(w, r)
 		} else if r.Method == http.MethodGet && r.URL.Path == "/" {
 			http.ServeFile(w, r, "assets/index.html")
 		} else {

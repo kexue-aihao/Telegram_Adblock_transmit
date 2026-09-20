@@ -3,7 +3,31 @@
 The moderation console uses graphite surfaces, a teal accent and translucent
 navigation. Content sections stay unframed; tables, filters and repeated metrics
 have defined boundaries. The interface uses the existing system-font stack and
-local Lucide sprite. There are no remote fonts, CDN scripts or frontend build steps.
+local Lucide sprite. There are no remote fonts and no CDN: the panel is built
+with Vite from `web/` into committed assets under `internal/webui/assets`, and it
+runs under a Content-Security-Policy that forbids inline scripts and `eval`.
+
+## Architecture
+
+The panel is a Vue 3 single-page app (hash routing) whose runtime primitives —
+request ownership, motion, dialogs, toasts, formatting — live in `web/src/core`
+and have exactly one implementation each. Pages migrate from the imperative
+renderers in `web/src/legacy` to Vue components one at a time behind the same
+router table, so both kinds of page share one shell and one set of rules.
+
+Invariants a page implementation must keep, whichever kind it is:
+
+- The routed page is a `<section class="page" tabindex="-1">` inside `#view`; a
+  route change cancels the previous page's GET requests and cross-fades a
+  snapshot of the outgoing page that carries no ids and is inert.
+- Requests: GETs inherit the page signal and die with their page; mutations never
+  do. Page state lives in the hash query (`router.replace`), never in history.
+- Motion goes through the shared owner, which clears every `will-change` it set;
+  no animation may outlive its element.
+- Accessibility and text are part of the contract: `role="switch"` with the
+  existing Chinese accessible names, real `<dialog>`, `<details>` and `<a>`
+  elements, and UTC timestamps formatted as before.
+- Values from the API are text, never markup.
 
 ## Tokens and layout
 

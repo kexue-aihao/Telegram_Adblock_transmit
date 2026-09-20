@@ -67,11 +67,36 @@ jobs:
       - name: Check formatting
         shell: bash
         run: test -z "$(gofmt -l .)"
+      # The panel bundle is committed, so building it here proves the artifacts
+      # still match their sources. Without this a frontend change could ship
+      # without its bundle, and the Go tests would still pass.
+      - name: Set up Node for the panel build
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Verify panel sources and committed assets agree
+        run: |
+          cd web
+          npm ci
+          npm run typecheck
+          npm run build
+          cd ..
+          git diff --exit-code -- internal/webui/assets
+          # git diff ignores new files, so catch an untracked chunk too.
+          test -z "$(git status --porcelain -- internal/webui/assets)"
+          test -z "$(ls internal/webui/assets | grep -E '^[_.]')"
+          test "$(grep -cE 'new Function|[^.]eval\(' internal/webui/assets/app.js)" = "0"
+
       - name: Scan source dependencies and filesystem
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
+          # Dev-only frontend tooling is not shipped in the image or the binary;
+          # the lock file above still pins and scans what the build uses.
+          skip-dirs: web/node_modules
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'

@@ -1,0 +1,12 @@
+# Generated panel assets: the build writes them with LF, and a checkout that
+# rewrites line endings would make the CI drift check (git diff --exit-code
+# internal/webui/assets) fail on every line.
+internal/webui/assets/** -text
+
+# Hand-written static sources are copied verbatim into the built assets, so
+# they must keep their bytes on every platform: with core.autocrlf a Windows
+# checkout would otherwise produce CRLF output and fail the CI drift check.
+web/static/** -text
+
+# npm lock files are generated; keep them byte-stable across platforms.
+web/package-lock.json -text

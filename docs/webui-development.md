@@ -1,14 +1,53 @@
 # WebUI Development and Verification
 
-The panel uses Go handlers and embedded HTML/CSS/JavaScript. It requires no
-frontend build or CDN. Production assets are embedded into the Go binary, so
-deploying UI changes requires rebuilding the binary or container image.
+The panel is a Vue 3 + TypeScript single-page app built with Vite. The source
+lives in `web/`; `npm run build` writes the bundle into `internal/webui/assets/`,
+and those artifacts are committed, so `go build`, the Dockerfile and CI need no
+Node toolchain. Production assets are embedded into the Go binary, so deploying
+UI changes still requires rebuilding the binary or container image.
+
+The panel serves under a strict Content-Security-Policy (`script-src 'self'`,
+no `unsafe-eval`, no inline scripts) and cannot use a CDN: templates must be
+precompiled (`.vue` single-file components), never evaluated at runtime, and
+`v-html` is not allowed — every API value is rendered as a text node.
+
+## Frontend build
+
+~~~bash
+cd web
+npm ci                 # pinned dependencies from package-lock.json
+npm run build          # writes ../internal/webui/assets (git-tracked)
+npm run typecheck      # vue-tsc + tsc for the build config
+npm run watch          # rollup watch, for iterating against the preview
+~~~
+
+The build is deterministic, so CI rebuilds and fails when the committed
+artifacts drift from the sources. Two rules keep it that way:
+
+- Output file names are fixed (`app.js`, `app.css`, `index.html`) because the Go
+  asset tests pin them; hashing would buy nothing under `Cache-Control: no-store`.
+- Everything the build emits must be LF and must not start with `_` or `.`.
+
+Also checked in CI and review:
+
+~~~bash
+git diff --exit-code -- internal/webui/assets
+ls internal/webui/assets | grep -E '^[_.]' && echo "go:embed drops these"
+grep -cE 'new Function|[^.]eval\(' internal/webui/assets/app.js   # expect 0
+grep -rn 'v-html' web/src                                          # expect none
+~~~
 
 ## Local Preview
 
 Run the following from the repository root in PowerShell:
 
+The preview serves `internal/webui/assets` from disk, so run a watch build in a
+second terminal and the browser picks up frontend edits on reload.
+
 ~~~powershell
+# terminal 1
+cd web; npm run watch
+# terminal 2
 $env:WEBUI_PREVIEW_ADDR = '127.0.0.1:8765'
 go test -tags webuipreview -run '^TestWebUIPreview$' -v ./internal/webui -timeout 0
 ~~~
@@ -123,9 +162,8 @@ Run outside the terminal with `WEBUI_PREVIEW_ADDR` set:
 go test -race ./...
 go test -race -tags webuipreview ./internal/webui
 go test -race ./internal/store -run '^(TestBuiltinSettingsRepositoryIntegration|TestPanelAuditBuiltinHitsIntegration|TestAuditDistinctMessagesIntegration)$' -count=1 -v
-node --check internal/webui/assets/app.js
-node --check internal/webui/assets/theme.js
-node --check internal/webui/assets/motion.js
+(cd web && npm run typecheck)
+node --check web/static/theme.js
 git diff --check
 ~~~
 
@@ -164,6 +202,8 @@ saved when the message was processed. The UI never re-analyzes historical
 summaries. Older `builtin_hits` resolve names through the builtin catalog; IDs
 absent from that catalog remain visible unchanged.
 
-`internal/webui/assets/icons.svg` contains selected icons from
-`lucide-static@1.47.0`. Its ISC license is included as
-`internal/webui/assets/lucide-LICENSE.txt`.
+`web/static/icons.svg` contains selected icons from `lucide-static@1.47.0`; the
+build copies it, the anti-FOUC `theme.js`, the favicon and
+`lucide-LICENSE.txt` next to the bundle unchanged. Icon references stay
+root-absolute (`<use href="/assets/icons.svg#name">`) so the bundler never
+inlines the sprite.

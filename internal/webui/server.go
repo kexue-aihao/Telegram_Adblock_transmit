@@ -11,6 +11,8 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/builtin"
@@ -18,7 +20,11 @@ import (
 	"github.com/kexue-aihao/telegram-adblock-transmit/internal/settings"
 )
 
-//go:embed assets
+// The all: prefix keeps dot- and underscore-prefixed files in the binary. A
+// bundler may emit shared helper chunks with those names, and dropping them
+// would only show up in production, where the disk-based preview cannot see it.
+//
+//go:embed all:assets
 var assetsFS embed.FS
 
 const maxJSONBodyBytes = 1 << 20 // 1 MiB
@@ -132,13 +138,41 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
+// assetTypes pins the Content-Type of the panel assets. Responses carry
+// X-Content-Type-Options: nosniff, and ES modules are subject to strict MIME
+// checking: a script served as text/plain leaves the panel blank. Go's built-in
+// table is not enough on Windows, where the registry overrides it.
+var assetTypes = map[string]string{
+	".js":    "text/javascript; charset=utf-8",
+	".mjs":   "text/javascript; charset=utf-8",
+	".css":   "text/css; charset=utf-8",
+	".html":  "text/html; charset=utf-8",
+	".svg":   "image/svg+xml",
+	".json":  "application/json; charset=utf-8",
+	".txt":   "text/plain; charset=utf-8",
+	".woff":  "font/woff",
+	".woff2": "font/woff2",
+}
+
+// assetFileServer serves the panel assets with those explicit types, reusing
+// http.FileServer for range requests, directory redirects and 404 handling.
+func assetFileServer(assets fs.FS) http.Handler {
+	fileServer := http.FileServer(http.FS(assets))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if contentType, ok := assetTypes[strings.ToLower(path.Ext(r.URL.Path))]; ok {
+			w.Header().Set("Content-Type", contentType)
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) routes() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /", s.handleIndex)
 	assets, err := fs.Sub(assetsFS, "assets")
 	if err == nil {
-		mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(assets))))
+		mux.Handle("GET /assets/", http.StripPrefix("/assets/", assetFileServer(assets)))
 	}
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 

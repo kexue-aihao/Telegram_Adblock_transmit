@@ -9,3 +9,4 @@ bot
 pyproject.toml
 alembic.ini
 *.db
+web/node_modules

@@ -606,6 +606,11 @@ func TestRealServerServesAssetsAndAuthenticates(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("app.js = %d", res.StatusCode)
 	}
+	// The panel bundles are ES modules: nosniff plus a wrong Content-Type would
+	// leave the page blank, and Windows would otherwise report text/plain.
+	if contentType := res.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "text/javascript") {
+		t.Fatalf("app.js content-type = %q, want text/javascript", contentType)
+	}
 
 	// Login then hit a protected endpoint with the session cookie.
 	loginReq, _ := http.NewRequest(http.MethodPost, server.URL+"/api/login",
