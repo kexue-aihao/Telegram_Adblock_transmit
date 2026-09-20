@@ -35,6 +35,9 @@
   --color-accent-bright: oklch(0.78 0.16 250);
   --color-accent-deep: oklch(0.55 0.18 262);
   --color-accent-soft: oklch(0.70 0.16 250 / 0.13);
+  /* Ink that sits on a filled accent surface. Only the graphite palette,
+     whose dark accent is light, needs to point this the other way. */
+  --color-on-accent: #ffffff;
 
   --color-violet: oklch(0.66 0.20 295);
   --color-success: oklch(0.74 0.16 155);
@@ -184,7 +187,7 @@ html[data-theme="light"] {
   --accent-hover: var(--color-brand-a);
   --accent-soft: var(--color-accent-soft);
   --accent-soft-strong: var(--color-accent-soft);
-  --accent-ink: #ffffff;
+  --accent-ink: var(--color-on-accent);
   --violet: var(--color-violet);
   --focus: var(--color-accent);
 
@@ -264,4 +267,196 @@ html[data-theme="light"] {
   --control-height-sm: 28px;
   --topbar-height: 56px;
   --sidebar-width: 220px;
+}
+
+/* ── Accent palettes ────────────────────────────────────────────────────────
+   A palette moves the brand hue only: the accent, the two stops of the brand
+   gradient and the four ambient orbs. The graphite canvas, the ink scale, the
+   radii, the motion vocabulary and the semantic trio are shared by all of them,
+   so success stays green and danger stays red whichever palette is active —
+   which is also why no palette claims the green or the red hue for itself.
+
+   Lightness and chroma are held at the values the default palette uses, so
+   every option keeps the same contrast profile on dark and on light; only the
+   hue and the amount of hue rotation between the two gradient stops change.
+
+   Each palette is written twice: html[data-accent=…] is the panel itself and
+   .palette-chip[data-palette=…] is the matching swatch in the settings picker.
+   One selector list carries one set of values, so a chip paints itself from the
+   tokens the panel would use and a palette cannot be added to one without the
+   other. The chips draw their own border, background and focus ring with
+   neutral tokens — never with the accent — so a chip is not tinted by the
+   palette it offers.
+
+   The light block of each palette repeats every token its dark block sets. That
+   is not redundancy: at equal specificity a later palette block would otherwise
+   beat the html[data-theme="light"] values above it. */
+html[data-accent="azure"], .palette-chip[data-palette="azure"] {
+  --color-accent: oklch(0.70 0.16 250);
+  --color-accent-bright: oklch(0.78 0.16 250);
+  --color-accent-deep: oklch(0.55 0.18 262);
+  --color-accent-soft: oklch(0.70 0.16 250 / 0.13);
+  --color-accent-ink: var(--color-accent);
+  --color-violet: oklch(0.66 0.20 295);
+  --color-brand-a: var(--color-accent-bright);
+  --color-brand-b: var(--color-violet);
+  --orb-a: oklch(0.70 0.21 258);
+  --orb-b: oklch(0.66 0.21 280);
+  --orb-c: oklch(0.64 0.24 296);
+  --orb-d: oklch(0.76 0.14 200);
+}
+html[data-theme="light"][data-accent="azure"], html[data-theme="light"] .palette-chip[data-palette="azure"] {
+  --color-accent-ink: oklch(0.47 0.19 264);
+  --color-brand-a: oklch(0.55 0.19 262);
+  --color-brand-b: oklch(0.52 0.21 295);
+  --orb-a: oklch(0.86 0.065 258);
+  --orb-b: oklch(0.88 0.058 280);
+  --orb-c: oklch(0.87 0.07 296);
+  --orb-d: oklch(0.90 0.048 200);
+  --spot-color: oklch(0.70 0.16 250 / 0.10);
+}
+
+/* 青碧: cyan accent, bending towards blue in the gradient. */
+html[data-accent="teal"], .palette-chip[data-palette="teal"] {
+  --color-accent: oklch(0.70 0.16 192);
+  --color-accent-bright: oklch(0.78 0.16 192);
+  --color-accent-deep: oklch(0.55 0.18 205);
+  --color-accent-soft: oklch(0.70 0.16 192 / 0.13);
+  --color-accent-ink: var(--color-accent);
+  --color-violet: oklch(0.66 0.20 235);
+  --color-brand-a: var(--color-accent-bright);
+  --color-brand-b: var(--color-violet);
+  --orb-a: oklch(0.70 0.21 192);
+  --orb-b: oklch(0.66 0.21 212);
+  --orb-c: oklch(0.64 0.24 235);
+  --orb-d: oklch(0.76 0.14 168);
+}
+html[data-theme="light"][data-accent="teal"], html[data-theme="light"] .palette-chip[data-palette="teal"] {
+  --color-accent-ink: oklch(0.47 0.19 205);
+  --color-brand-a: oklch(0.55 0.19 205);
+  --color-brand-b: oklch(0.52 0.21 235);
+  --orb-a: oklch(0.86 0.065 192);
+  --orb-b: oklch(0.88 0.058 212);
+  --orb-c: oklch(0.87 0.07 235);
+  --orb-d: oklch(0.90 0.048 168);
+  --spot-color: oklch(0.70 0.16 192 / 0.10);
+}
+
+/* 紫罗兰: violet accent, bending towards magenta. */
+html[data-accent="violet"], .palette-chip[data-palette="violet"] {
+  --color-accent: oklch(0.70 0.16 300);
+  --color-accent-bright: oklch(0.78 0.16 300);
+  --color-accent-deep: oklch(0.55 0.18 312);
+  --color-accent-soft: oklch(0.70 0.16 300 / 0.13);
+  --color-accent-ink: var(--color-accent);
+  --color-violet: oklch(0.66 0.20 335);
+  --color-brand-a: var(--color-accent-bright);
+  --color-brand-b: var(--color-violet);
+  --orb-a: oklch(0.70 0.21 300);
+  --orb-b: oklch(0.66 0.21 318);
+  --orb-c: oklch(0.64 0.24 338);
+  --orb-d: oklch(0.76 0.14 265);
+}
+html[data-theme="light"][data-accent="violet"], html[data-theme="light"] .palette-chip[data-palette="violet"] {
+  --color-accent-ink: oklch(0.47 0.19 312);
+  --color-brand-a: oklch(0.55 0.19 312);
+  --color-brand-b: oklch(0.52 0.21 335);
+  --orb-a: oklch(0.86 0.065 300);
+  --orb-b: oklch(0.88 0.058 318);
+  --orb-c: oklch(0.87 0.07 338);
+  --orb-d: oklch(0.90 0.048 265);
+  --spot-color: oklch(0.70 0.16 300 / 0.10);
+}
+
+/* 品红: magenta accent, bending back towards violet. Kept 45 degrees off the
+   red the danger colour owns, so a primary button never reads as a destructive
+   one. */
+html[data-accent="magenta"], .palette-chip[data-palette="magenta"] {
+  --color-accent: oklch(0.70 0.16 338);
+  --color-accent-bright: oklch(0.78 0.16 338);
+  --color-accent-deep: oklch(0.55 0.18 350);
+  --color-accent-soft: oklch(0.70 0.16 338 / 0.13);
+  --color-accent-ink: var(--color-accent);
+  --color-violet: oklch(0.66 0.20 305);
+  --color-brand-a: var(--color-accent-bright);
+  --color-brand-b: var(--color-violet);
+  --orb-a: oklch(0.70 0.21 336);
+  --orb-b: oklch(0.66 0.21 318);
+  --orb-c: oklch(0.64 0.24 352);
+  --orb-d: oklch(0.76 0.14 292);
+}
+html[data-theme="light"][data-accent="magenta"], html[data-theme="light"] .palette-chip[data-palette="magenta"] {
+  --color-accent-ink: oklch(0.47 0.19 350);
+  --color-brand-a: oklch(0.55 0.19 350);
+  --color-brand-b: oklch(0.52 0.21 305);
+  --orb-a: oklch(0.86 0.065 336);
+  --orb-b: oklch(0.88 0.058 318);
+  --orb-c: oklch(0.87 0.07 352);
+  --orb-d: oklch(0.90 0.048 292);
+  --spot-color: oklch(0.70 0.16 338 / 0.10);
+}
+
+/* 琥珀: the one warm palette. The gradient stays inside amber and gold rather
+   than running into orange-red, which is the hue the danger colour owns. */
+html[data-accent="amber"], .palette-chip[data-palette="amber"] {
+  --color-accent: oklch(0.70 0.16 58);
+  --color-accent-bright: oklch(0.78 0.16 58);
+  --color-accent-deep: oklch(0.55 0.18 48);
+  --color-accent-soft: oklch(0.70 0.16 58 / 0.13);
+  --color-accent-ink: var(--color-accent);
+  --color-violet: oklch(0.68 0.17 78);
+  --color-brand-a: var(--color-accent-bright);
+  --color-brand-b: var(--color-violet);
+  --orb-a: oklch(0.70 0.21 58);
+  --orb-b: oklch(0.68 0.20 78);
+  --orb-c: oklch(0.68 0.19 42);
+  --orb-d: oklch(0.78 0.14 96);
+}
+html[data-theme="light"][data-accent="amber"], html[data-theme="light"] .palette-chip[data-palette="amber"] {
+  --color-accent-ink: oklch(0.47 0.16 48);
+  --color-brand-a: oklch(0.55 0.17 48);
+  --color-brand-b: oklch(0.52 0.16 72);
+  --orb-a: oklch(0.86 0.065 58);
+  --orb-b: oklch(0.88 0.06 78);
+  --orb-c: oklch(0.87 0.06 42);
+  --orb-d: oklch(0.90 0.05 96);
+  --spot-color: oklch(0.70 0.16 58 / 0.10);
+}
+
+/* 石墨: no hue at all. The accent is a near-neutral silver, which puts it in
+   the monochrome tradition rather than competing with the semantic colours. Its
+   dark accent is light, so it is the one palette that flips the ink sitting on
+   the brand gradient (--color-on-accent). */
+html[data-accent="graphite"], .palette-chip[data-palette="graphite"] {
+  --color-accent: oklch(0.72 0.012 250);
+  --color-accent-bright: oklch(0.80 0.012 250);
+  --color-accent-deep: oklch(0.58 0.014 262);
+  --color-accent-soft: oklch(0.72 0.012 250 / 0.13);
+  --color-accent-ink: var(--color-accent);
+  --color-violet: oklch(0.70 0.016 292);
+  --color-brand-a: var(--color-accent-bright);
+  --color-brand-b: var(--color-violet);
+  --color-on-accent: oklch(0.18 0.008 260);
+  --orb-a: oklch(0.74 0.02 250);
+  --orb-b: oklch(0.70 0.02 285);
+  --orb-c: oklch(0.68 0.02 300);
+  --orb-d: oklch(0.78 0.015 210);
+}
+html[data-theme="light"][data-accent="graphite"], html[data-theme="light"] .palette-chip[data-palette="graphite"] {
+  /* On white a silver accent has nothing to stand against, so the light theme
+     darkens the whole accent family instead of only the gradient. */
+  --color-accent: oklch(0.52 0.008 250);
+  --color-accent-bright: oklch(0.62 0.008 250);
+  --color-accent-deep: oklch(0.40 0.010 262);
+  --color-accent-soft: oklch(0.52 0.008 250 / 0.13);
+  --color-accent-ink: oklch(0.34 0.010 260);
+  --color-violet: oklch(0.46 0.012 292);
+  --color-brand-a: oklch(0.46 0.010 258);
+  --color-brand-b: oklch(0.26 0.012 292);
+  --color-on-accent: #ffffff;
+  --orb-a: oklch(0.88 0.010 250);
+  --orb-b: oklch(0.89 0.010 285);
+  --orb-c: oklch(0.88 0.012 300);
+  --orb-d: oklch(0.90 0.008 210);
+  --spot-color: oklch(0.52 0.008 250 / 0.10);
 }

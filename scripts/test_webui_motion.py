@@ -93,6 +93,34 @@ def run(base_url, output, engines, axe_path=None):
             expect(page.locator(".audit-table")).to_be_visible()
             settle()
 
+            # The palette is the second appearance axis. It is independent of
+            # light/dark, it repaints the brand colour, and it also persists.
+            brand = "() => getComputedStyle(document.querySelector('.brand-mark')).backgroundImage"
+            brand_before = page.evaluate(brand)
+            visit("settings", ".palette-grid")
+            page.get_by_role("radio", name="琥珀", exact=True).check()
+            expect(page.locator("html")).to_have_attribute("data-accent", "amber")
+            assert page.evaluate(brand) != brand_before, (engine, "palette did not repaint the brand mark")
+            # A swatch paints the palette it offers, not the one that is active.
+            swatch = page.evaluate("""() => {
+                const chip = document.querySelector('.palette-chip[data-palette="teal"]');
+                return {
+                    chip: getComputedStyle(chip).getPropertyValue('--color-accent').trim(),
+                    active: getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim(),
+                };
+            }""")
+            assert swatch["chip"] and swatch["chip"] != swatch["active"], (engine, swatch)
+            settle()
+            page.reload()
+            expect(page.locator("html")).to_have_attribute("data-accent", "amber")
+            expect(page.locator("html")).to_have_attribute("data-theme", theme)
+            visit("settings", ".palette-grid")
+            page.get_by_role("radio", name="湛蓝", exact=True).check()
+            expect(page.locator("html")).to_have_attribute("data-accent", "azure")
+            settle()
+            visit("audit", ".audit-table")
+            settle()
+
             # Collect a bounded frame sample; results describe the host, not a universal FPS claim.
             perf = page.evaluate("""async () => {
                 const frames = [], tasks = [];
@@ -206,7 +234,7 @@ def run(base_url, output, engines, axe_path=None):
             settle()
             assert not errors, errors
             results.append({"browser": engine, "performance": perf, "accessibility_checks": accessibility_count,
-                            "page_errors": errors, "checks": "navigation interruption, late response, modal focus/cleanup, theme persistence, responsive layout, reduced motion, forced colors, CSS zoom, session expiry"})
+                            "page_errors": errors, "checks": "navigation interruption, late response, modal focus/cleanup, theme persistence, palette persistence, responsive layout, reduced motion, forced colors, CSS zoom, session expiry"})
             context.close()
             video.save_as(str(output / f"{engine}-motion.webm"))
             video.delete()

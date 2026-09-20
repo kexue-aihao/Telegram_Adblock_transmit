@@ -18,6 +18,7 @@ import { compactNum, date, num, positiveInt, utcDay } from '../core/format'
 import { panelMotion } from '../core/motion'
 import { hashURL, reloadPage, routeParams, syncParams } from '../core/params'
 import { state } from '../core/stores'
+import { ACCENTS, currentAccent, setAccent } from '../core/theme'
 import { feedback, toast } from '../core/toast'
 
 async function renderDashboard(view) {
@@ -839,8 +840,31 @@ async function renderSettings(view) {
           el("p", { class: "hint" }, "对所有群组生效。群管理员也可以在群里用 /settings 查看。")),
         controls);
     })();
+    // Appearance. Like the theme, the palette is a per-browser preference: it
+    // is stored locally, saves nothing on the server and survives no session.
+    const appearanceSection = (() => {
+      const grid = el("div", { class: "palette-grid", role: "radiogroup", "aria-label": "配色主题" });
+      const active = currentAccent();
+      ACCENTS.forEach((palette) => {
+        // A real radio inside the label: the group keeps one tab stop and
+        // arrow-key navigation, and the label text names the control.
+        const input = el("input", { type: "radio", name: "accent-palette", value: palette.id, checked: palette.id === active });
+        input.addEventListener("change", () => {
+          if (!input.checked) return;
+          setAccent(palette.id);
+          toast("已切换到「" + palette.label + "」主题。");
+        });
+        grid.append(el("label", { class: "palette-chip", dataset: { palette: palette.id } },
+          input, el("span", { class: "palette-dot", "aria-hidden": "true" }), el("span", { class: "palette-name" }, palette.label)));
+      });
+      return el("section", { class: "section settings-section" },
+        el("div", null, el("h2", null, "配色主题"),
+          el("p", { class: "hint" }, "只改变品牌色与背景光晕；深浅外观仍由顶栏的按钮切换。选择保存在本机浏览器。")),
+        grid);
+    })();
     empty(view).append(pageHeader("设置", "当前登录：" + account.username),
       el("div", { class: "settings-sections" },
+        appearanceSection,
         el("section", { class: "section settings-section" }, el("div", null, el("h2", null, "登录账号"), el("p", { class: "hint" }, "修改后需要重新登录。")), accountForm),
         el("section", { class: "section settings-section" }, el("div", null, el("h2", null, "登录密码"), el("p", { class: "hint" }, "修改后所有现有会话将退出。")), passwordForm),
         runtimeSection));

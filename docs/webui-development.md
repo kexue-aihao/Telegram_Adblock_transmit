@@ -118,6 +118,9 @@ Checks cover:
 - Account validation, credential changes, expired sessions and logout.
 - Runtime settings: profile-check and cross-group switches, owner ID validation,
   persistence across reloads and the cross-group warning state.
+- The settings page's palette picker: switching repaints the brand colour,
+  survives a reload, stays independent of the light/dark toggle, and each
+  swatch paints the palette it offers rather than the one that is active.
 
 For optional WCAG A/AA checks, install axe-core into an ignored directory:
 
@@ -148,7 +151,8 @@ Use `--browsers chromium` for a targeted run. Screenshots, `<browser>-motion.web
 recordings and `report.json` are written to `.gocache/webui-motion/` by default.
 This suite uses normal animation, checks interruption and cleanup, and covers
 1920/1440/768/390/320px viewports. It also checks reduced motion, forced colors,
-theme persistence, 200% CSS zoom, modal focus restoration and expired sessions.
+theme and palette persistence, 200% CSS zoom, modal focus restoration and expired
+sessions.
 The suite does not relax the production Content Security Policy.
 Run it after the business regression suite, or use a separate preview port with
 `--base-url`. Account changes in the business suite invalidate other sessions on

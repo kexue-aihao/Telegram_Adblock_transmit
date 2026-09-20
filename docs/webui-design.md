@@ -57,6 +57,38 @@ Headings carry `-0.015em` tracking, everywhere else tracking is zero. Spacing
 follows 4/8/12/16/20/24/32/40px increments (`--space-*`), and numerals in
 metrics, tables and chart axes are tabular.
 
+### Color palettes
+
+Dark/light is one axis and the brand hue is another. Six palettes ship —
+湛蓝 (azure, the default), 青碧, 紫罗兰, 品红, 琥珀 and 石墨 — selected in the
+settings page and stored per browser under `panel-accent`, next to `panel-theme`.
+The choice is written to `data-accent` on the root element before the first
+paint by `web/static/theme.js`, exactly like `data-theme`, so a reload never
+flashes the default hue.
+
+A palette moves the brand hue only: `--color-accent*`, the two stops of the
+brand gradient and the four ambient orbs. The graphite canvas, the ink scale,
+the semantic trio and everything that is not a colour are shared, so switching
+palette never changes what a page means. Two rules keep that true:
+
+- No palette claims the green or the red hue. Success stays green and danger
+  stays red in all of them, and the warm and magenta options are held far enough
+  off those hues that a primary button never reads as a destructive one.
+- Lightness and chroma are held at the values the default palette uses, so each
+  option keeps the same contrast profile on dark and on light. 石墨 is the
+  exception that proves the rule: a near-neutral accent is light in the dark
+  theme, so it is the one palette that flips `--color-on-accent`, the ink that
+  sits on the brand gradient.
+
+In `tokens.css` every palette is written twice — once for `html[data-accent=…]`
+and once for `.palette-chip[data-palette=…]`, the matching swatch in the
+settings picker. One selector list carries one set of values, so the chip paints
+itself from the tokens the panel would use and a palette cannot be added to one
+without the other. The chips draw their own chrome with neutral tokens so a chip
+is never tinted by the palette it offers. Adding a palette means adding the id
+to `core/theme.ts`, to the list in `static/theme.js` and to the token blocks —
+the classic pre-paint script cannot import the list.
+
 Controls use 8px radii, panels 12px, navigation chrome 16px and dialogs 24px. The 216px desktop sidebar and 64px topbar have 12px outer
 insets. Content is capped at 1600px. Below 900px the sidebar becomes a horizontal
 navigation bar; below 640px labels stack beneath icons and tables become labeled
@@ -89,9 +121,10 @@ a full-page capture lays the fixed layer out over the whole document and makes
 the orbs look far brighter than they are.
 
 Reduced transparency, increased contrast, forced colors and unsupported backdrop
-filters receive opaque surfaces and no ambient layer. Stored theme preference
-takes priority over the initial system appearance, with initialization before CSS
-to avoid a flash.
+filters receive opaque surfaces and no ambient layer. Stored theme and palette
+preferences take priority over the initial system appearance, with
+initialization before CSS to avoid a flash. Only the theme has a system
+preference to fall back to; the palette falls back to 湛蓝.
 
 ## Motion and request ownership
 
@@ -167,3 +200,30 @@ Rollback uses the previous binary/image.
 - Before screenshots: `.gocache/webui-before/`. Final screenshots, recordings and
   motion report: `.gocache/webui-motion/`. Business report: `.gocache/webui-after/`.
   Separate performance sample: `.gocache/webui-motion/performance-no-video.json`.
+
+## Verification record: 2026-09-20
+
+Accent palettes and the settings picker.
+
+- `go test ./...`, `go vet ./...` and `gofmt` passed. `internal/webui/assets` was
+  rebuilt from `web/` and the build is byte-reproducible, so the committed bundle
+  carries the palettes; `git diff --exit-code -- internal/webui/assets` stays the
+  CI check for that.
+- `(cd web && npm run typecheck)` and `node --check web/static/theme.js` passed.
+- The business suite passed all 17 scenarios and 13 axe checks. Both browser
+  suites ran against a disposable preview started on a second port
+  (127.0.0.1:8766) because a preview the user had open was already listening on
+  8765; that server was left alone, since the suites change the account and would
+  have invalidated its sessions.
+- Chromium, Firefox and WebKit passed the motion suite, which now also asserts
+  that a palette switch repaints the brand mark, that the choice survives a
+  reload, that the light/dark theme is untouched by it, and that a swatch paints
+  the palette it offers rather than the active one. Chromium with axe passed 20
+  checks across both themes and desktop/mobile, matching the 2026-09-19 run.
+- No page errors in any suite.
+- Visual check of all six palettes in dark and light, plus the picker close up,
+  in `.gocache/palette-shots/`. The default 湛蓝 palette renders the accent
+  values the panel had before the change.
+- The frame samples from the final three-engine run (chromium 27 frames, firefox
+  40, webkit 21) were recorded with video capture on, so they are not comparable
+  with the 2026-09-19 no-video sample and remain diagnostic only.
