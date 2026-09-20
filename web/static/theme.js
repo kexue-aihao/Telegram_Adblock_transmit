@@ -9,8 +9,15 @@
     theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
   document.documentElement.dataset.theme = theme;
-  // The build injects this script at the very start of <head>, so the meta tag
-  // may not be parsed yet.
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = theme === "dark" ? "#111619" : "#f3f6f5";
+  // The colour of the browser chrome. The two theme-color tags in index.html are
+  // media-scoped, which covers the system preference before any script runs; a
+  // stored preference overrides the system one, so both tags then carry it.
+  // This script is injected at the very start of <head>, ahead of those tags, so
+  // the first call is a no-op and the second one lands as parsing finishes.
+  const colors = { dark: "#07080b", light: "#eceff5" };
+  const applyColor = () => {
+    document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => { meta.content = colors[theme]; });
+  };
+  applyColor();
+  document.addEventListener("DOMContentLoaded", applyColor, { once: true });
 })();

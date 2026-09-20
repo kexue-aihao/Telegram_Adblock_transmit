@@ -4,7 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f3f6f5">
+<!-- Media-scoped so the browser chrome is right before any script runs; theme.js
+     rewrites both when a stored theme preference overrides the system one. -->
+<meta name="theme-color" content="#07080b" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#eceff5" media="(prefers-color-scheme: light)">
 <title>广告拦截管理面板</title>
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 </head>

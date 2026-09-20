@@ -1,1 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="14" fill="#1b2327"/><path d="M24 8 37 13v10c0 8-7 14-13 17-6-3-13-9-13-17V13Z" fill="none" stroke="#71d5be" stroke-width="2.5"/><path d="m18 23 4 4 9-9" fill="none" stroke="#71d5be" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- The sidebar brand mark: a 125 degree blue-to-violet tile carrying the
+       Lucide shield-check glyph. The stops are the panel's brand tokens resolved
+       to sRGB. It uses the light-theme pair rather than the dark-theme one: the
+       tab renders this at 16px, where the pale dark-theme blue leaves the white
+       glyph illegible against light browser chrome. The gradient vector matches
+       CSS linear-gradient(125deg) on a 48px box. -->
+  <defs>
+    <linearGradient id="brand" x1="-0.07" y1="0.1" x2="1.07" y2="0.9">
+      <stop offset="0" stop-color="#2d69de" />
+      <stop offset="1" stop-color="#7640d2" />
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="14" fill="url(#brand)" />
+  <g transform="translate(9.6 9.6) scale(1.2)" fill="none" stroke="#fff" stroke-width="2.4"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+    <path d="m9 12 2 2 4-4" />
+  </g>
+</svg>

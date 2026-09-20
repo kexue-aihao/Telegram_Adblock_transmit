@@ -3,7 +3,10 @@
 export type Theme = 'dark' | 'light'
 
 const THEME_STORAGE_KEY = 'panel-theme'
-const META_COLORS: Record<Theme, string> = { dark: '#111619', light: '#f3f6f5' }
+// The browser chrome colour, matching --color-bg-0 in each theme. index.html
+// ships them media-scoped; static/theme.js owns the pre-paint pass, so this is
+// only for the explicit toggle.
+const META_COLORS: Record<Theme, string> = { dark: '#07080b', light: '#eceff5' }
 
 export function currentTheme(): Theme {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -12,8 +15,10 @@ export function currentTheme(): Theme {
 export function toggleTheme(): Theme {
   const theme: Theme = currentTheme() === 'dark' ? 'light' : 'dark'
   document.documentElement.dataset.theme = theme
-  const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', META_COLORS[theme])
+  // Both tags, so the media-scoped pair agrees once a choice is stored.
+  document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+    meta.setAttribute('content', META_COLORS[theme])
+  })
   try {
     localStorage.setItem(THEME_STORAGE_KEY, theme)
   } catch {
