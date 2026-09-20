@@ -28,6 +28,13 @@ function isActive(item: string): boolean {
 
 <template>
   <aside id="sidebar" class="sidebar" :hidden="!state.authenticated">
+    <div class="brand">
+      <span class="brand-mark"><Icon name="shield-check" /></span>
+      <span>
+        <span class="brand-title">广告拦截</span>
+        <span class="brand-sub">Telegram Adblock</span>
+      </span>
+    </div>
     <nav class="nav" aria-label="主导航">
       <span class="nav-indicator" aria-hidden="true"></span>
       <a v-for="item in items" :key="item.route" :href="routeHref(item.route)" class="nav-item" :data-route="item.route"

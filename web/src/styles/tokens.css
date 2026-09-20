@@ -1,107 +1,230 @@
-/* Design tokens for the moderation console.
-   Token names are a contract: the not-yet-migrated page renderers reference
-   some of them directly, and the theme is switched by html[data-theme].
-
-   The language follows the sibling panel (packages/web-vue in
-   Telegram_session_Adblock): depth comes from luminance steps plus a hairline
-   with a one-pixel inner highlight, interaction states are neutral alpha
-   washes, and the brand colour appears only where it carries meaning. */
+/* Design tokens.
+   Values are copied from the sibling panel
+   (Telegram_session_Adblock/packages/web-vue/src/styles/theme.css) so the two
+   consoles look like one product. The alias block at the bottom maps the names
+   the structural stylesheet already speaks onto those values. */
 
 :root {
+  color-scheme: dark;
+
+  /* ── Surfaces: three luminance steps ──────────────────────────────────── */
+  --color-bg-0: #07080b;
+  --color-bg-1: #0c0e13;
+  --color-bg-2: #11141b;
+  --color-bg-3: #171b24;
+  --color-bg-4: #1e2330;
+
+  /* Hover and selection: white laid over any layer. */
+  --color-hover: rgb(255 255 255 / 0.04);
+  --color-active: rgb(255 255 255 / 0.07);
+
+  /* Strokes: three weights, brighter towards the top. */
+  --color-line-faint: rgb(255 255 255 / 0.05);
+  --color-line: rgb(255 255 255 / 0.09);
+  --color-line-strong: rgb(255 255 255 / 0.16);
+  --color-highlight: rgb(255 255 255 / 0.07);
+
+  /* ── Text ─────────────────────────────────────────────────────────────── */
+  --color-ink: #e9ebf2;
+  --color-ink-muted: #9aa1b2;
+  --color-ink-subtle: #626a7c;
+  --color-ink-faint: #414958;
+
+  /* ── Brand and semantics (oklch keeps the hue while lightness moves) ──── */
+  --color-accent: oklch(0.70 0.16 250);
+  --color-accent-bright: oklch(0.78 0.16 250);
+  --color-accent-deep: oklch(0.55 0.18 262);
+  --color-accent-soft: oklch(0.70 0.16 250 / 0.13);
+
+  --color-violet: oklch(0.66 0.20 295);
+  --color-success: oklch(0.74 0.16 155);
+  --color-success-soft: oklch(0.74 0.16 155 / 0.13);
+  --color-warn: oklch(0.80 0.14 80);
+  --color-warn-soft: oklch(0.80 0.14 80 / 0.13);
+  --color-danger: oklch(0.68 0.20 25);
+  --color-danger-soft: oklch(0.68 0.20 25 / 0.13);
+
+  /* ── Ambient orbs ─────────────────────────────────────────────────────── */
+  --orb-a: oklch(0.70 0.21 258);
+  --orb-b: oklch(0.66 0.21 280);
+  --orb-c: oklch(0.64 0.24 296);
+  --orb-d: oklch(0.76 0.14 200);
+  --ambient-opacity: 0.5;
+  --orb-blur: 72px;
+
+  /* ── Glass ────────────────────────────────────────────────────────────── */
+  --glass-base: var(--color-bg-1);
+  --glass-alpha: 52%;
+  --glass-deep-base: var(--color-bg-2);
+  --glass-deep-alpha: 66%;
+  --glass-shadow: rgb(0 0 0 / 0.7);
+  --spot-color: rgb(255 255 255 / 0.08);
+
+  /* ── Type ─────────────────────────────────────────────────────────────── */
+  --font-sans: "Inter var", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "SF Mono", Consolas, monospace;
+  --text-2xs: 11px;
+  --text-2xs--line-height: 16px;
+  --text-xs: 12px;
+  --text-xs--line-height: 18px;
+  --text-sm: 13px;
+  --text-sm--line-height: 20px;
+  --text-base: 14px;
+  --text-base--line-height: 22px;
+  --text-lg: 16px;
+  --text-lg--line-height: 24px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 28px;
+  --text-2xl--line-height: 34px;
+  --text-3xl: 40px;
+  --text-3xl--line-height: 46px;
+  --tracking-tight: -0.025em;
+
+  /* ── Radii ────────────────────────────────────────────────────────────── */
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+
+  /* ── Motion: one vocabulary, no scattered magic numbers ───────────────── */
+  --duration-micro: 120ms;
+  --duration-state: 200ms;
+  --duration-layout: 320ms;
+  --duration-page: 480ms;
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-state: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Readable aliases (kept AA in both themes). */
+  --color-accent-ink: var(--color-accent);
+  --color-brand-a: var(--color-accent-bright);
+  --color-brand-b: var(--color-violet);
+}
+
+/* Light theme overrides colours only; spacing, radii and motion are shared. */
+html[data-theme="light"] {
   color-scheme: light;
 
-  /* Surfaces: the canvas sits well below white so cards and glass can stand up. */
-  --bg: #eceff5;
-  --bg-deep: #e4e8ef;
-  --surface: #ffffff;
-  --surface-2: #f2f4f8;
-  --surface-3: #e4e8ef;
-  --surface-inset: #f2f4f8;
+  --color-bg-0: #eceff5;
+  --color-bg-1: #ffffff;
+  --color-bg-2: #ffffff;
+  --color-bg-3: #f2f4f8;
+  --color-bg-4: #e4e8ef;
 
-  /* Neutral interaction washes: they work on any surface. */
-  --hover: rgb(12 16 24 / 0.035);
-  --active: rgb(12 16 24 / 0.06);
-  --highlight: rgb(255 255 255 / 0.9);
+  --color-hover: rgb(12 16 24 / 0.035);
+  --color-active: rgb(12 16 24 / 0.06);
 
-  /* Lines: three weights, brighter towards the top. */
-  --border-soft: rgb(12 16 24 / 0.08);
-  --border: rgb(12 16 24 / 0.13);
-  --border-strong: rgb(12 16 24 / 0.18);
+  --color-line-faint: rgb(12 16 24 / 0.08);
+  --color-line: rgb(12 16 24 / 0.13);
+  --color-line-strong: rgb(12 16 24 / 0.18);
+  --color-highlight: rgb(255 255 255 / 0.9);
 
-  /* Ink */
-  --text: #12151c;
-  --text-soft: #596172;
-  --muted: #596172;
-  --muted-strong: #454c5c;
-  --faint: #858da0;
+  --color-ink: #12151c;
+  --color-ink-muted: #596172;
+  --color-ink-subtle: #858da0;
+  --color-ink-faint: #b4bac7;
 
-  /* Brand: a single blue, plus a violet partner for gradients. */
-  --accent: oklch(0.51 0.18 262);
-  --accent-bright: oklch(0.70 0.16 250);
-  --accent-hover: oklch(0.44 0.19 264);
-  --accent-deep: oklch(0.45 0.19 264);
-  --accent-soft: oklch(0.70 0.16 250 / 0.12);
-  --accent-soft-strong: oklch(0.70 0.16 250 / 0.2);
-  --accent-ink: #ffffff;
-  --violet: oklch(0.62 0.20 295);
-  --focus: oklch(0.51 0.18 262);
+  /* The reference keeps its dark-tuned accents in both themes. That reads fine
+     on a near-black canvas but fails AA on white, so light mode keeps the same
+     hues at a lower lightness wherever the colour carries text. */
+  --color-accent-ink: oklch(0.47 0.19 264);
+  /* The brand gradient keeps the blue→violet direction but darkens so white
+     text on the primary button clears AA on a light canvas. */
+  --color-brand-a: oklch(0.55 0.19 262);
+  --color-brand-b: oklch(0.52 0.21 295);
+  --color-success: oklch(0.47 0.13 155);
+  --color-danger: oklch(0.47 0.19 25);
+  --color-warn: oklch(0.50 0.14 80);
 
-  /* Semantic */
-  --ok: oklch(0.47 0.13 155);
-  --ok-soft: oklch(0.70 0.16 155 / 0.16);
-  --warn: oklch(0.5 0.14 80);
-  --warn-soft: oklch(0.80 0.14 80 / 0.18);
-  --err: oklch(0.47 0.19 25);
-  --err-soft: oklch(0.68 0.20 25 / 0.14);
-  --info: oklch(0.55 0.18 262);
-
-  /* Data visualisation */
-  --chart-success: oklch(0.62 0.13 168);
-  --chart-failed: oklch(0.62 0.19 20);
-  --chart-grid: rgb(12 16 24 / 0.08);
-
-  /* Ambient: four slow orbs are what makes the glass read as glass. */
   --orb-a: oklch(0.86 0.065 258);
   --orb-b: oklch(0.88 0.058 280);
   --orb-c: oklch(0.87 0.07 296);
   --orb-d: oklch(0.9 0.048 200);
-  --ambient-opacity: 0.5;
+  --ambient-opacity: 0.72;
   --orb-blur: 100px;
 
-  /* Glass: in light mode a surface must be whiter than the canvas, not clearer. */
   --glass-base: #ffffff;
   --glass-alpha: 68%;
   --glass-deep-base: #ffffff;
   --glass-deep-alpha: 88%;
   --glass-shadow: rgb(15 18 26 / 0.14);
+  --spot-color: oklch(0.70 0.16 250 / 0.10);
+}
+
+/* ── Aliases ────────────────────────────────────────────────────────────────
+   The structural stylesheet predates the token split and still speaks the old
+   names. Everything here is a mapping, never a new value. */
+:root,
+html[data-theme="light"] {
+  --bg: var(--color-bg-0);
+  --bg-deep: var(--color-bg-1);
+  --surface: var(--color-bg-1);
+  --surface-2: var(--color-bg-3);
+  --surface-3: var(--color-bg-4);
+  --surface-inset: var(--color-bg-2);
+  --surface2: var(--color-bg-3);
+
+  --text: var(--color-ink);
+  --text-soft: var(--color-ink-muted);
+  --muted: var(--color-ink-muted);
+  --muted-strong: var(--color-ink);
+  --faint: var(--color-ink-subtle);
+
+  --border-soft: var(--color-line-faint);
+  --border: var(--color-line);
+  --border-strong: var(--color-line-strong);
+  --hover: var(--color-hover);
+  --active: var(--color-active);
+  --highlight: var(--color-highlight);
+
+  --accent: var(--color-accent);
+  --accent-bright: var(--color-accent-bright);
+  --accent-deep: var(--color-accent-deep);
+  --accent-hover: var(--color-brand-a);
+  --accent-soft: var(--color-accent-soft);
+  --accent-soft-strong: var(--color-accent-soft);
+  --accent-ink: #ffffff;
+  --violet: var(--color-violet);
+  --focus: var(--color-accent);
+
+  --ok: var(--color-success);
+  --ok-soft: var(--color-success-soft);
+  --warn: var(--color-warn);
+  --warn-soft: var(--color-warn-soft);
+  --err: var(--color-danger);
+  --err-soft: var(--color-danger-soft);
+  --info: var(--color-accent);
+
+  --chart-success: var(--color-success);
+  --chart-failed: var(--color-danger);
+  --chart-grid: var(--color-line-faint);
+
   --glass: color-mix(in oklab, var(--glass-base) var(--glass-alpha), transparent);
   --glass-strong: color-mix(in oklab, var(--glass-deep-base) var(--glass-deep-alpha), transparent);
-  --glass-edge: var(--highlight);
-  --glass-tint: rgb(255 255 255 / 0.5);
+  --glass-edge: var(--color-highlight);
+  --glass-tint: var(--color-hover);
   --blur: 24px;
   --blur-strong: 32px;
+  --glass-shadow-composed: inset 0 1px 0 var(--color-highlight), 0 24px 64px -16px var(--glass-shadow);
+  --inner-highlight: inset 0 1px 0 var(--color-highlight);
 
-  /* Elevation: content cards carry no drop shadow, only the inner highlight. */
-  --shadow-xs: 0 1px 2px rgb(15 18 26 / 0.06);
-  --shadow-sm: 0 1px 3px rgb(15 18 26 / 0.08);
+  --shadow-xs: 0 1px 2px var(--glass-shadow);
+  --shadow-sm: 0 1px 3px var(--glass-shadow);
   --shadow-md: 0 8px 24px -8px var(--glass-shadow);
   --shadow-lg: 0 16px 48px -12px var(--glass-shadow);
   --shadow-xl: 0 24px 64px -16px var(--glass-shadow);
   --shadow: var(--shadow-xl);
   --surface-shadow: var(--shadow-sm);
-  --glass-shadow-composed: inset 0 1px 0 var(--highlight), var(--shadow-lg);
-  --glow-accent: 0 0 0 3px var(--accent-soft);
-  --inner-highlight: inset 0 1px 0 var(--highlight);
+  --glow-accent: 0 0 0 3px var(--color-accent-soft);
 
-  /* Radii */
   --radius-xs: 6px;
-  --radius-control: 8px;
-  --radius-panel: 12px;
-  --radius-chrome: 16px;
-  --radius-modal: 24px;
+  --radius-control: var(--radius-lg);
+  --radius-panel: var(--radius-2xl);
+  --radius-chrome: var(--radius-2xl);
+  --radius-modal: var(--radius-3xl);
   --radius-pill: 999px;
 
-  /* Spacing scale */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -111,38 +234,19 @@
   --space-8: 32px;
   --space-10: 40px;
 
-  /* Type scale 11/12/13/14/16/20/28/40 */
-  --font-sans: "Inter var", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
-  --text-2xs: 11px;
-  --text-xs: 12px;
-  --text-sm: 13px;
-  --text-base: 14px;
-  --text-md: 14px;
-  --text-lg: 16px;
-  --text-xl: 20px;
-  --text-2xl: 28px;
-  --text-metric: 30px;
-  --leading-2xs: 16px;
-  --leading-xs: 18px;
-  --leading-sm: 20px;
-  --leading-base: 22px;
-  --leading-lg: 24px;
-  --leading-xl: 28px;
-  --leading-2xl: 34px;
-  --tracking-tight: -0.022em;
+  --text-md: var(--text-base);
+  --text-metric: var(--text-2xl);
+  --leading-2xs: var(--text-2xs--line-height);
+  --leading-xs: var(--text-xs--line-height);
+  --leading-sm: var(--text-sm--line-height);
+  --leading-base: var(--text-base--line-height);
+  --leading-lg: var(--text-lg--line-height);
+  --leading-xl: var(--text-xl--line-height);
+  --leading-2xl: var(--text-2xl--line-height);
   --tracking-wide: 0.08em;
 
-  /* Motion: one vocabulary, no scattered magic numbers. */
-  --duration-micro: 120ms;
-  --duration-state: 200ms;
-  --duration-layout: 320ms;
-  --duration-page: 480ms;
-  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-state: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease: var(--ease-expo);
+  --ease-in-out: var(--ease-state);
   --motion-instant: var(--duration-micro);
   --motion-fast: var(--duration-micro);
   --motion-control: var(--duration-state);
@@ -150,93 +254,14 @@
   --motion-slow: var(--duration-page);
   --stagger: 28ms;
 
-  /* Layers */
   --layer-base: 0;
   --layer-nav: 3;
   --layer-popover: 6;
   --layer-toast: 10;
   --layer-skip: 20;
 
-  /* Aliases kept for the structural stylesheet, which predates the token split. */
-  --surface2: var(--surface-2);
-  --ambient: var(--orb-a);
-
-  /* Component shorthands */
   --control-height: 36px;
-  --control-height-sm: 30px;
+  --control-height-sm: 28px;
   --topbar-height: 56px;
-  --sidebar-width: 232px;
-}
-
-[data-theme="dark"] {
-  color-scheme: dark;
-
-  /* Near-black with a blue-violet cast: pure black loses the layering. */
-  --bg: #07080b;
-  --bg-deep: #050609;
-  --surface: #0c0e13;
-  --surface-2: #11141b;
-  --surface-3: #171b24;
-  --surface-inset: #11141b;
-
-  --hover: rgb(255 255 255 / 0.04);
-  --active: rgb(255 255 255 / 0.07);
-  --highlight: rgb(255 255 255 / 0.07);
-
-  --border-soft: rgb(255 255 255 / 0.05);
-  --border: rgb(255 255 255 / 0.09);
-  --border-strong: rgb(255 255 255 / 0.16);
-
-  --text: #e9ebf2;
-  --text-soft: #9aa1b2;
-  --muted: #9aa1b2;
-  --muted-strong: #c3c8d6;
-  --faint: #626a7c;
-
-  --accent: oklch(0.78 0.16 250);
-  --accent-bright: oklch(0.70 0.16 250);
-  --accent-hover: oklch(0.86 0.13 250);
-  --accent-deep: oklch(0.55 0.18 262);
-  --accent-soft: oklch(0.70 0.16 250 / 0.16);
-  --accent-soft-strong: oklch(0.70 0.16 250 / 0.26);
-  --accent-ink: #06121f;
-  --violet: oklch(0.66 0.20 295);
-  --focus: oklch(0.78 0.16 250);
-
-  --ok: oklch(0.74 0.16 155);
-  --ok-soft: oklch(0.74 0.16 155 / 0.13);
-  --warn: oklch(0.80 0.14 80);
-  --warn-soft: oklch(0.80 0.14 80 / 0.13);
-  --err: oklch(0.68 0.20 25);
-  --err-soft: oklch(0.68 0.20 25 / 0.13);
-  --info: oklch(0.78 0.16 250);
-
-  --chart-success: oklch(0.74 0.16 155);
-  --chart-failed: oklch(0.68 0.20 25);
-  --chart-grid: rgb(255 255 255 / 0.09);
-
-  --orb-a: oklch(0.70 0.21 258);
-  --orb-b: oklch(0.66 0.21 280);
-  --orb-c: oklch(0.64 0.24 296);
-  --orb-d: oklch(0.76 0.14 200);
-  --ambient-opacity: 0.3;
-  --orb-blur: 110px;
-
-  --glass-base: var(--surface);
-  --glass-alpha: 52%;
-  --glass-deep-base: var(--surface-2);
-  --glass-deep-alpha: 66%;
-  --glass-shadow: rgb(0 0 0 / 0.7);
-  --glass-edge: var(--highlight);
-  --glass-tint: rgb(255 255 255 / 0.03);
-  --blur: 24px;
-  --blur-strong: 32px;
-
-  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.5);
-  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.5);
-  --shadow-md: 0 8px 24px -8px var(--glass-shadow);
-  --shadow-lg: 0 16px 48px -12px var(--glass-shadow);
-  --shadow-xl: 0 24px 64px -16px var(--glass-shadow);
-  --glow-accent: 0 0 0 3px var(--accent-soft);
-  --inner-highlight: inset 0 1px 0 var(--highlight);
+  --sidebar-width: 220px;
 }

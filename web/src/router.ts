@@ -102,7 +102,7 @@ router.afterEach((to, from) => {
       panelMotion.play(clone, [{ opacity: .65 }, { opacity: 0 }], 70, {}, () => clone.remove())
     }
   }
-  if (to.path !== from.path) window.scrollTo({ top: 0, behavior: 'instant' })
+  if (to.path !== from.path) document.getElementById('view')?.scrollTo({ top: 0, behavior: 'instant' })
   // The marker moves once Vue has re-rendered the navigation items: reading
   // aria-current here directly would still see the previous route.
   void nextTick(() => syncNavIndicator(to.path !== from.path))

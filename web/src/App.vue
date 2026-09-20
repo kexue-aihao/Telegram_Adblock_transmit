@@ -62,27 +62,29 @@ onBeforeUnmount(() => {
     <span class="ambient-orb orb-d" />
   </div>
   <div class="shell">
-  <a class="skip-link" href="#view" @click="onSkipLink">跳到主要内容</a>
-  <TopBar />
-  <div class="layout">
-    <SideBar />
-    <main id="view" class="view" tabindex="-1">
-      <div v-if="booting" class="loading skeleton-rows" role="status">
-        <div class="skeleton-shapes" aria-hidden="true">
-          <span class="skeleton-block" /><span class="skeleton-block" /><span class="skeleton-block" />
-        </div>
-        <span class="loading-caption">正在连接面板…</span>
+    <a class="skip-link" href="#view" @click="onSkipLink">跳到主要内容</a>
+    <div class="layout">
+      <SideBar />
+      <div class="content">
+        <TopBar />
+        <main id="view" class="view" tabindex="-1">
+          <div v-if="booting" class="loading skeleton-rows" role="status">
+            <div class="skeleton-shapes" aria-hidden="true">
+              <span class="skeleton-block" /><span class="skeleton-block" /><span class="skeleton-block" />
+            </div>
+            <span class="loading-caption">正在连接面板…</span>
+          </div>
+          <div v-else-if="bootError" class="request-error">
+            <div class="notice err" role="alert"><Icon name="circle-alert" /><span>{{ bootError }}</span></div>
+            <button class="btn" type="button" @click="onReload"><Icon name="refresh-cw" /><span>重试</span></button>
+          </div>
+          <LoginView v-else-if="!state.authenticated" />
+          <RouterView v-else v-slot="{ Component }">
+            <component :is="Component" :key="route.path + ':' + pageReloadToken" />
+          </RouterView>
+        </main>
       </div>
-      <div v-else-if="bootError" class="request-error">
-        <div class="notice err" role="alert"><Icon name="circle-alert" /><span>{{ bootError }}</span></div>
-        <button class="btn" type="button" @click="onReload"><Icon name="refresh-cw" /><span>重试</span></button>
-      </div>
-      <LoginView v-else-if="!state.authenticated" />
-      <RouterView v-else v-slot="{ Component }">
-        <component :is="Component" :key="route.path + ':' + pageReloadToken" />
-      </RouterView>
-    </main>
-  </div>
+    </div>
   </div>
   <div id="modal-root"></div>
   <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-relevant="additions"></div>

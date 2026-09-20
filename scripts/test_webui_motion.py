@@ -127,11 +127,19 @@ def run(base_url, output, engines, axe_path=None):
                     for route, ready in routes:
                         visit(route, ready)
                         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), (engine, width, route)
-                        # Selection marker must remain aligned after both navigation and resize.
+                        # The selection marker is a thin bar, so what has to hold is
+                        # that its centre stays on the active item's centre after both
+                        # navigation and resize.
                         delta = page.evaluate("""() => {
                             const a = document.querySelector('.nav-indicator').getBoundingClientRect();
                             const b = document.querySelector('.nav-item[aria-current]').getBoundingClientRect();
-                            return Math.max(Math.abs(a.x-b.x), Math.abs(a.y-b.y), Math.abs(a.width-b.width));
+                            // Desktop: a vertical rail bar, so vertical tracking is
+                            // what matters. Mobile: the bar lies flat, so horizontal.
+                            const nav = document.querySelector('.nav').getBoundingClientRect();
+                            const horizontal = nav.width > nav.height * 2;
+                            return horizontal
+                              ? Math.abs((a.x + a.width / 2) - (b.x + b.width / 2))
+                              : Math.abs((a.y + a.height / 2) - (b.y + b.height / 2));
                         }""")
                         assert delta < 2, (engine, width, route, delta)
                         if engine == "chromium" and width in (1440, 390):

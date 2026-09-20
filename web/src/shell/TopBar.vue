@@ -33,16 +33,13 @@ async function onLogout(event: MouseEvent): Promise<void> {
 
 <template>
   <header class="topbar">
-    <a class="brand" href="#/dashboard" aria-label="广告拦截管理面板首页">
-      <Icon name="shield-check" cls="brand-mark" />
-      <span>广告拦截<span class="brand-sub">管理控制台</span></span>
-    </a>
     <div class="topbar-actions">
       <span id="account-name" class="account-name">{{ state.authenticated ? state.username : '' }}</span>
       <button id="theme-toggle" class="icon-btn" type="button" :title="themeLabel" :aria-label="themeLabel" @click="onToggleTheme">
         <Icon name="sun" cls="theme-sun" />
         <Icon name="moon" cls="theme-moon" />
       </button>
+      <span class="topbar-divider" aria-hidden="true" />
       <button id="logout-btn" class="icon-btn" type="button" title="退出登录" aria-label="退出登录"
         :hidden="!state.authenticated" @click="onLogout">
         <Icon name="log-out" />
