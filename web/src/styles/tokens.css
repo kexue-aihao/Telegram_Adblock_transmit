@@ -1,0 +1,194 @@
+/* Design tokens for the moderation console.
+   Token names are a contract: the not-yet-migrated page renderers reference
+   some of them directly, and the theme is switched by html[data-theme]. */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces: paper-white cards on a cool graphite wash. */
+  --bg: #f2f5f5;
+  --bg-deep: #e8edee;
+  --surface: #ffffff;
+  --surface-2: #f1f4f4;
+  --surface-3: #e7eded;
+  --surface-inset: #edf1f1;
+
+  /* Ink */
+  --text: #0d1a1c;
+  --text-soft: #37484c;
+  --muted: #5a6d71;
+  --muted-strong: #4c5f63;
+
+  /* Lines */
+  --border: #dde5e6;
+  --border-soft: rgba(13, 26, 28, 0.07);
+  --border-strong: #b6c3c5;
+
+  /* Brand: deep jade with a brighter partner for gradients. */
+  --accent: #0d7268;
+  --accent-hover: #0a5d55;
+  --accent-strong: #084a44;
+  --accent-bright: #14b8a6;
+  --accent-soft: #e4f3f0;
+  --accent-soft-strong: #cfebe6;
+  --accent-ink: #ffffff;
+
+  /* Semantic */
+  --ok: #07714b;
+  --ok-soft: #e5f4ec;
+  --err: #b02531;
+  --err-soft: #fdecee;
+  --warn: #8a5209;
+  --warn-soft: #fdf3e0;
+  --info: #245ecc;
+  --focus: #1f5fd0;
+
+  /* Data visualisation */
+  --chart-success: #0e8a6c;
+  --chart-failed: #d34a56;
+  --chart-grid: rgba(13, 26, 28, 0.08);
+
+  /* Glass: chrome, dialogs and floating cards. */
+  --glass: rgba(255, 255, 255, 0.68);
+  --glass-strong: rgba(255, 255, 255, 0.84);
+  --glass-edge: rgba(255, 255, 255, 0.9);
+  --glass-tint: rgba(255, 255, 255, 0.5);
+  --blur: 16px;
+  --blur-strong: 22px;
+
+  /* Ambient: a static aurora behind the whole panel. */
+  --ambient-1: rgba(20, 184, 166, 0.1);
+  --ambient-2: rgba(79, 110, 220, 0.08);
+  --ambient-3: rgba(13, 114, 104, 0.05);
+  --grid-line: rgba(13, 26, 28, 0.035);
+
+  /* Elevation: layered, low-contrast shadows that read as depth, not blur. */
+  --shadow-xs: 0 1px 2px rgba(10, 26, 28, 0.05);
+  --shadow-sm: 0 1px 2px rgba(10, 26, 28, 0.05), 0 2px 8px rgba(10, 26, 28, 0.05);
+  --shadow-md: 0 2px 4px rgba(10, 26, 28, 0.05), 0 10px 24px rgba(10, 26, 28, 0.07);
+  --shadow-lg: 0 4px 8px rgba(10, 26, 28, 0.06), 0 20px 48px rgba(10, 26, 28, 0.1);
+  --shadow-xl: 0 8px 16px rgba(10, 26, 28, 0.08), 0 40px 88px rgba(10, 26, 28, 0.16);
+  --shadow: var(--shadow-xl);
+  --surface-shadow: var(--shadow-sm);
+  --glass-shadow: var(--shadow-md), inset 0 1px 0 var(--glass-edge);
+  --glow-accent: 0 0 0 1px rgba(13, 114, 104, 0.18), 0 8px 24px rgba(13, 114, 104, 0.16);
+  --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+
+  /* Radii */
+  --radius-xs: 6px;
+  --radius-control: 11px;
+  --radius-panel: 16px;
+  --radius-chrome: 20px;
+  --radius-modal: 24px;
+  --radius-pill: 999px;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Type scale */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono: "Cascadia Code", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-metric: 38px;
+  --tracking-tight: -0.015em;
+  --tracking-wide: 0.08em;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-instant: 90ms;
+  --motion-fast: 140ms;
+  --motion-control: 200ms;
+  --motion-page: 260ms;
+  --motion-slow: 420ms;
+  --stagger: 28ms;
+
+  /* Layers */
+  --layer-base: 0;
+  --layer-nav: 3;
+  --layer-popover: 6;
+  --layer-toast: 10;
+  --layer-skip: 20;
+
+  /* Component shorthands */
+  --control-height: 40px;
+  --control-height-sm: 32px;
+  --topbar-height: 64px;
+  --sidebar-width: 232px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #080d0f;
+  --bg-deep: #05090b;
+  --surface: #0f1719;
+  --surface-2: #141e21;
+  --surface-3: #1a2629;
+  --surface-inset: #0c1315;
+
+  --text: #e9f2f1;
+  --text-soft: #c2d2d1;
+  --muted: #91a6a5;
+  --muted-strong: #a9bcbb;
+
+  --border: #1f2c30;
+  --border-soft: rgba(233, 242, 241, 0.08);
+  --border-strong: #33454a;
+
+  --accent: #2fd4bd;
+  --accent-hover: #62e4d1;
+  --accent-strong: #8ff0e2;
+  --accent-bright: #4fe3cd;
+  --accent-soft: rgba(47, 212, 189, 0.13);
+  --accent-soft-strong: rgba(47, 212, 189, 0.22);
+  --accent-ink: #04241f;
+
+  --ok: #4ddba4;
+  --ok-soft: rgba(77, 219, 164, 0.14);
+  --err: #ff9aa4;
+  --err-soft: rgba(255, 122, 137, 0.16);
+  --warn: #f2c879;
+  --warn-soft: rgba(242, 200, 121, 0.15);
+  --info: #8ab4ff;
+  --focus: #86b1ff;
+
+  --chart-success: #37c9a1;
+  --chart-failed: #ff8b95;
+  --chart-grid: rgba(233, 242, 241, 0.09);
+
+  --glass: rgba(12, 19, 21, 0.62);
+  --glass-strong: rgba(12, 19, 21, 0.82);
+  --glass-edge: rgba(233, 242, 241, 0.07);
+  --glass-tint: rgba(255, 255, 255, 0.025);
+  --blur: 18px;
+  --blur-strong: 24px;
+
+  --ambient-1: rgba(47, 212, 189, 0.12);
+  --ambient-2: rgba(96, 128, 255, 0.1);
+  --ambient-3: rgba(47, 212, 189, 0.05);
+  --grid-line: rgba(233, 242, 241, 0.03);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 10px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45), 0 12px 28px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 6px 14px rgba(0, 0, 0, 0.5), 0 24px 56px rgba(0, 0, 0, 0.55);
+  --shadow-xl: 0 10px 24px rgba(0, 0, 0, 0.55), 0 48px 96px rgba(0, 0, 0, 0.6);
+  --glow-accent: 0 0 0 1px rgba(47, 212, 189, 0.24), 0 10px 28px rgba(47, 212, 189, 0.18);
+  --inner-highlight: inset 0 1px 0 rgba(233, 242, 241, 0.06);
+}

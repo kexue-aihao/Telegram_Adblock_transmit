@@ -31,22 +31,28 @@ Invariants a page implementation must keep, whichever kind it is:
 
 ## Tokens and layout
 
+Tokens live in `web/src/styles/tokens.css`; the structural rules that the page
+renderers depend on stay in `components.css`, and the visual treatment is layered
+on top of them in the same file.
+
 | Role | Light | Dark |
 | --- | --- | --- |
-| Background | `#f3f6f5` | `#111619` |
-| Content surface | `#ffffff` | `#1b2327` |
-| Primary text | `#202a29` | `#edf3f2` |
-| Secondary text | `#586965` | `#aab9b7` |
-| Accent | `#08786f` | `#71d5be` |
-| Glass fill | white / 82% | content surface / 86% |
+| Background | `#f2f5f5` | `#080d0f` |
+| Content surface | `#ffffff` | `#0f1719` |
+| Primary text | `#0d1a1c` | `#e9f2f1` |
+| Secondary text | `#5a6d71` (AA on every surface) | `#91a6a5` |
+| Accent | `#0d7268` → `#14b8a6` gradient | `#2fd4bd` → `#4fe3cd` gradient |
+| Glass fill | white / 68%, strong 84% | ink / 62%, strong 82% |
+| Ambient | teal + indigo radials, static | same, higher alpha |
 
 Semantic success, warning and error colors remain independent of the brand
 accent. Headings use 28/18px, body text 14px, secondary information at least 12px,
-and primary metrics 36px. Mobile fields use 16px to avoid automatic input zoom.
-Letter spacing is zero. Spacing follows 4/8/12/16/24/32px increments.
+and primary metrics 38px. Mobile fields use 16px to avoid automatic input zoom.
+Headings carry `-0.015em` tracking, everywhere else tracking is zero. Spacing
+follows 4/8/12/16/20/24/32/40px increments (`--space-*`), and numerals in
+metrics, tables and chart axes are tabular.
 
-Controls use 10px radii, framed data tools and metrics 8px, navigation chrome
-16px and dialogs 20px. The 216px desktop sidebar and 64px topbar have 12px outer
+Controls use 11px radii, panels 16px, navigation chrome 20px and dialogs 24px. The 216px desktop sidebar and 64px topbar have 12px outer
 insets. Content is capped at 1600px. Below 900px the sidebar becomes a horizontal
 navigation bar; below 640px labels stack beneath icons and tables become labeled
 records. Dashboard trend/failure columns collapse below 1200px.
@@ -59,9 +65,18 @@ over the initial system appearance, with initialization before CSS to avoid a fl
 
 ## Motion and request ownership
 
-`motion.js` owns Web Animations, their cancellation and temporary layer hints.
-The standard curve is `cubic-bezier(.22, 1, .36, 1)`. Navigation indicators move
-for 220ms; pages enter for 240ms; metrics stagger by 30ms; dialogs enter for 240ms
+`web/src/core/motion.ts` owns Web Animations, their cancellation and temporary
+layer hints; `web/src/shell/decorate.ts` adds the selection animations for markup
+that page renderers produced imperatively. The standard curve is
+`cubic-bezier(.22, 1, .36, 1)`, with `cubic-bezier(.34, 1.4, .64, 1)` for springs.
+Selection affordances animate: the navigation marker slides between items (220ms),
+the segmented-control thumb (`.segmented`, `.quick-dates`, `.rule-tabs`) slides
+behind the active option (240ms), and switches move their knob with a spring.
+Card entrances stagger by 28ms and are capped at a handful of elements; a chart
+enters as a single surface, because animating every row or column separately costs
+far more than it reads. Animations must stay compositor-only: never animate
+`background-position`, `width` or `filter` on large surfaces.
+Navigation indicators move for 220ms; pages enter for 240ms; dialogs enter for 240ms
 and exit for 160ms; notifications enter/exit for 180ms. Only dialogs use a small
 spring overshoot. Controls use 120-180ms feedback. Details expand with a short
 opacity/translation reveal. There are no background animation loops.
