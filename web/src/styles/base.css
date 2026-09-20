@@ -176,8 +176,17 @@ h1, h2, h3 { letter-spacing: var(--tracking-tight); font-weight: 600; }
   animation: drift-a 108s ease-in-out infinite reverse;
 }
 
-/* The shell paints above the ambient layer. */
-.shell { position: relative; z-index: 10; height: 100%; }
+/* The shell paints above the ambient layer. It has to be a full-height flex
+   column: the panel scrolls inside #view, never on the document (body is
+   overflow: hidden), and that only works if .layout can stretch to the shell
+   and hand #view a bounded height. As a plain block every wrapper grew to its
+   content, so #view was as tall as the page and its overflow never engaged —
+   long pages were clipped with no way to reach the rest. */
+.shell {
+  position: relative; z-index: 10;
+  height: 100%; height: 100dvh;
+  display: flex; flex-direction: column; min-height: 0;
+}
 
 /* ── Motion vocabulary ───────────────────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(1turn); } }
